@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 @theme inline {
@@ -19,8 +21,50 @@
   }
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Origin-aware popover/dropdown entrance + exit. Enter is handled by
+   @starting-style (fires on first paint after mount); exit is handled by
+   toggling [data-closing] before the component delays its unmount so the
+   transition has time to play. */
+.popover-anim {
+  transform-origin: var(--transform-origin, top right);
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+}
+
+.popover-anim[data-closing="true"] {
+  opacity: 0;
+  transform: scale(0.95) translateY(-4px);
+}
+
+/* Alert/error box entrance. */
+.alert-anim {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
