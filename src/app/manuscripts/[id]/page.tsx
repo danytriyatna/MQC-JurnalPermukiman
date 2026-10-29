@@ -5,6 +5,10 @@ import FindingsView, { FindingRowData } from "@/components/findings/FindingsView
 import VersionHistoryList, { VersionHistoryItem } from "@/components/manuscripts/VersionHistoryList";
 import RevisionUploadSection from "@/components/manuscripts/RevisionUploadSection";
 import DeleteManuscriptButton from "@/components/manuscripts/DeleteManuscriptButton";
+import ReferenceVerificationPanel, {
+  ReferenceCheckRowData,
+  ReferenceRunData,
+} from "@/components/references/ReferenceVerificationPanel";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateID } from "@/lib/status";
 import { ManuscriptStatus } from "@/lib/types";
@@ -35,6 +39,8 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
 
   let parseErrorMessage: string | null = null;
   let findings: FindingRowData[] = [];
+  let referenceRun: ReferenceRunData | null = null;
+  let referenceChecks: ReferenceCheckRowData[] = [];
 
   if (manuscript.current_version_id) {
     const { data: version } = await supabase
@@ -70,6 +76,29 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
           expectedValue: f.expected_value,
           suggestedFix: f.suggested_fix,
         }));
+      }
+
+      // Reference verification is stored per version and re-runnable, so the
+      // most recent run is shown and the panel can start another.
+      const { data: refRun } = await supabase
+        .from("reference_check_runs")
+        .select("id, source_set_version, total_references, started_at, completed_at")
+        .eq("manuscript_version_id", version.id)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (refRun) {
+        referenceRun = refRun;
+        const { data: refChecks } = await supabase
+          .from("reference_checks")
+          .select(
+            "id, entry_index, raw_text, kind, doi, url, verdict, confidence, note, match_source, match_title, match_year, match_url, match_similarity",
+          )
+          .eq("run_id", refRun.id)
+          .order("entry_index", { ascending: true });
+
+        referenceChecks = (refChecks ?? []) as ReferenceCheckRowData[];
       }
     }
   }
@@ -165,6 +194,14 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
             </div>
 
             <FindingsView findings={findings} />
+
+            <div className="mt-4">
+              <ReferenceVerificationPanel
+                manuscriptId={manuscript.id}
+                initialRun={referenceRun}
+                initialChecks={referenceChecks}
+              />
+            </div>
           </>
         )}
 

@@ -510,7 +510,7 @@ function hasApaYearMarker(text: string): boolean {
  * styles weren't preserved. Returns null if no References heading exists
  * (already reported by checkStructureHeadings).
  */
-function getReferenceEntries(doc: ParsedDocument): ParsedParagraph[] | null {
+export function getReferenceEntries(doc: ParsedDocument): ParsedParagraph[] | null {
   const refHeadingIndex = doc.paragraphs.find((p) => isHeadingCandidate(p.text) === "REFERENCES")?.index;
   if (refHeadingIndex === undefined) return null;
 
@@ -616,7 +616,7 @@ export function checkTableFigureCaptions(doc: ParsedDocument): FindingDraft[] {
   ];
 }
 
-interface ParsedReference {
+export interface ParsedReference {
   surnames: string[];
   year: string;
 }
@@ -656,7 +656,7 @@ const INSTITUTIONAL_AUTHOR_KEYWORDS =
  * government, or legal-document "authors", which APA cites by full name or
  * title rather than a surname.
  */
-function parseReferenceAuthorYear(refText: string): ParsedReference | null {
+export function parseReferenceAuthorYear(refText: string): ParsedReference | null {
   // Allows a full publication date in parens, e.g. "(2023a, January 9)" —
   // common for news/blog references — not just a bare "(2007)".
   const yearMatch = refText.match(/\((\d{4}[a-z]?)(?:,[^)]*)?\)/);
