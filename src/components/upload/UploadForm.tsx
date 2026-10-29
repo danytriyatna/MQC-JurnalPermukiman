@@ -2,62 +2,116 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { buildManuscriptStoragePath } from "@/lib/upload/storagePath";
+import { validateDocxUpload } from "@/lib/upload/validateFile";
+import { DOCX_CONTENT_TYPE, MANUSCRIPT_BUCKET } from "@/lib/upload/constants";
+
+type Phase = "idle" | "uploading" | "screening";
 
 export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+
+  const isUploading = phase !== "idle";
 
   const validateAndUpload = async (file: File) => {
     setError(null);
 
-    if (!file.name.toLowerCase().endsWith(".docx")) {
-      setError("Hanya file .docx yang didukung. Silakan konversi naskah ke format Word terlebih dahulu.");
-      return;
-    }
-
-    if (file.size === 0) {
-      setError("File kosong. Pilih file naskah yang valid.");
-      return;
-    }
-
-    if (file.size > 50 * 1024 * 1024) {
-      setError("Ukuran file terlalu besar (maksimum 50MB).");
+    const validationError = validateDocxUpload(file.name, file.size);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setFileName(file.name);
-    setIsUploading(true);
+    setPhase("uploading");
+
+    const fail = (message: string) => {
+      setError(message);
+      setPhase("idle");
+    };
+
+    const supabase = createClient();
+    let storagePath: string;
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
+      if (!user) {
+        fail("Sesi Anda sudah berakhir. Silakan login ulang lalu coba lagi.");
+        return;
+      }
+
+      storagePath = buildManuscriptStoragePath(user.id);
+
+      // The .docx goes straight from the browser into Storage rather than
+      // through /api/manuscripts. Posting it to the API would put the whole
+      // file in a serverless function's request body, which Vercel caps at
+      // about 4.5MB — far below the 50MB this form accepts, and rejected at
+      // the edge with a response the browser cannot read as JSON.
+      const { error: uploadError } = await supabase.storage
+        .from(MANUSCRIPT_BUCKET)
+        .upload(storagePath, file, {
+          contentType: DOCX_CONTENT_TYPE,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        fail(`Gagal mengunggah file ke penyimpanan: ${uploadError.message}`);
+        return;
+      }
+    } catch {
+      fail("Gagal mengunggah file. Periksa koneksi internet Anda dan coba lagi.");
+      return;
+    }
+
+    setPhase("screening");
+
+    try {
       const endpoint = manuscriptId
         ? `/api/manuscripts/${manuscriptId}/revisions`
         : "/api/manuscripts";
-      const res = await fetch(endpoint, { method: "POST", body: formData });
-      const body = await res.json();
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath, originalFileName: file.name }),
+      });
+
+      // An error produced upstream of the route — a gateway, a proxy, a
+      // platform limit — comes back as HTML, not JSON. Parsing it outside the
+      // catch kept those cases indistinguishable from a dropped connection.
+      const body = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(body.error ?? "Gagal memproses naskah. Coba lagi.");
-        setIsUploading(false);
+        fail(body?.error ?? `Gagal memproses naskah (HTTP ${res.status}). Coba lagi.`);
+        // Safe only on an explicit rejection: every path that answers with an
+        // error leaves no manuscript_versions row pointing at this object. A
+        // lost response is not the same thing — see the catch below.
+        void supabase.storage.from(MANUSCRIPT_BUCKET).remove([storagePath]);
         return;
       }
 
       if (manuscriptId) {
         router.refresh();
-        setIsUploading(false);
+        setPhase("idle");
         setFileName(null);
       } else {
         router.push(`/manuscripts/${body.manuscriptId}`);
       }
     } catch {
-      setError("Gagal terhubung ke server. Periksa koneksi internet Anda dan coba lagi.");
-      setIsUploading(false);
+      // The object is deliberately left in place. Screening may well have
+      // succeeded with only the response lost, in which case a row already
+      // references this key and deleting it would break the original-file
+      // download. An unreferenced object merely wastes storage.
+      fail("Gagal terhubung ke server. Periksa koneksi internet Anda dan coba lagi.");
     }
   };
 
@@ -109,8 +163,14 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
             </svg>
-            <p className="mt-3 text-sm font-medium text-slate-900">Memproses {fileName}…</p>
-            <p className="mt-1 text-xs text-slate-500">Mengunggah dan memeriksa kesesuaian naskah, mohon tunggu.</p>
+            <p className="mt-3 text-sm font-medium text-slate-900">
+              {phase === "uploading" ? "Mengunggah" : "Memeriksa"} {fileName}…
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {phase === "uploading"
+                ? "Mengirim file ke penyimpanan, mohon tunggu."
+                : "Memeriksa kesesuaian naskah dengan gaya selingkung, mohon tunggu."}
+            </p>
           </>
         ) : (
           <>

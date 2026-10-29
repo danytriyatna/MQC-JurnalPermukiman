@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { screenManuscript, summarize } from "@/lib/docx/screenManuscript";
 import { DocxParseError } from "@/lib/docx/parseDocx";
 import { FindingDraft } from "@/lib/docx/types";
-import { validateDocxFile } from "@/lib/upload/validateFile";
-import { buildManuscriptStoragePath } from "@/lib/upload/storagePath";
+import { receiveUploadedManuscript } from "@/lib/upload/receiveUpload";
 
 const RULE_SET_VERSION = "jurnal-permukiman-2026-v1";
 
@@ -18,19 +17,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Anda harus login." }, { status: 401 });
   }
 
-  const formData = await request.formData();
-  const file = formData.get("file");
-
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "File tidak ditemukan." }, { status: 400 });
+  // The browser has already uploaded the .docx to Storage; this only receives
+  // its key and reads the bytes back. See receiveUploadedManuscript for why
+  // the file does not travel in this request's body.
+  const received = await receiveUploadedManuscript(request, supabase, user.id);
+  if (!received.ok) {
+    return NextResponse.json({ error: received.error }, { status: received.status });
   }
 
-  const validationError = validateDocxFile(file);
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
-  }
-
-  const title = file.name.replace(/\.docx$/i, "");
+  const { storagePath, originalFileName, buffer } = received;
+  const title = originalFileName.replace(/\.docx$/i, "");
 
   // Create the manuscript row up front with status "processing" so it's
   // immediately visible on the dashboard (and reflected in the "Sedang
@@ -40,7 +36,7 @@ export async function POST(request: NextRequest) {
     .from("manuscripts")
     .insert({
       title,
-      original_file_name: file.name,
+      original_file_name: originalFileName,
       uploaded_by: user.id,
       status: "processing",
       version_number: 1,
@@ -67,8 +63,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   };
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-
   let screening: Awaited<ReturnType<typeof screenManuscript>> | null = null;
   let parseStatus: "success" | "failed" = "success";
   let parseErrorMessage: string | null = null;
@@ -81,25 +75,12 @@ export async function POST(request: NextRequest) {
       err instanceof DocxParseError ? err.message : "Gagal memproses isi dokumen.";
   }
 
-  const storagePath = buildManuscriptStoragePath(user.id);
-  const { error: uploadError } = await supabase.storage
-    .from("manuscripts")
-    .upload(storagePath, buffer, {
-      contentType:
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      upsert: false,
-    });
-
-  if (uploadError) {
-    return markFailed(`Gagal menyimpan file: ${uploadError.message}`);
-  }
-
   const { data: version, error: versionError } = await supabase
     .from("manuscript_versions")
     .insert({
       manuscript_id: manuscript.id,
       version_number: 1,
-      original_file_name: file.name,
+      original_file_name: originalFileName,
       file_storage_path: storagePath,
       uploaded_by: user.id,
       parse_status: parseStatus,
