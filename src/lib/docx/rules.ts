@@ -581,12 +581,55 @@ const HEADING_SIZE_HALF_PT = 22; // 11pt — used to tell an actual caption
  * order, which needs real evidence of how the app renders those fields
  * before it could be validated automatically.
  */
+/** "Figure 5", "Tabel 2.", "Figure " with the number still a SEQ field. */
+const CAPTION_LABEL = /^(table|tabel|figure|gambar)\s*\d*\s*[.:]?\s*/i;
+
+/**
+ * A caption is a label and a short title. Body prose that opens by referring
+ * to a figure runs on for a paragraph; the longest real caption observed
+ * across the submissions on file is 90 characters, the shortest offending
+ * sentence 639, so this sits far from both.
+ */
+const MAX_CAPTION_CHARS = 250;
+
+/**
+ * Tells a caption apart from a sentence that merely begins with the word
+ * "Figure" or "Table".
+ *
+ * The original test — starts with the word, is not at heading size — matched
+ * ordinary prose such as "Figure 8 shows an overlay map between the results of
+ * annual SO2 dispersion modelling...", because body text is set in the same
+ * Cambria 10pt as a caption and the only guard was against the 11pt used by
+ * headings. Every such sentence was then reported as a malformed caption, in
+ * manuscripts whose captions were in fact correct, which is the worst kind of
+ * false positive: it tells an author to fix something that was never wrong.
+ *
+ * Two signals separate them, and both must hold. A caption is short. And what
+ * follows its number is a title, which starts with a capital — whereas a
+ * sentence continues in lower case ("shows", "presents", "menunjukkan").
+ * Together these cost at most a caption whose title genuinely begins in lower
+ * case, which goes unchecked rather than wrongly accused — the safe direction
+ * to err for a rule that drives pass/fail.
+ */
+function isCaptionParagraph(p: ParsedParagraph): boolean {
+  const text = p.text.trim();
+
+  if (!CAPTION_LABEL.test(text)) return false;
+  // Guideline headings like "Table Presentation in the Manuscript (Heading
+  // Lev. 3)" are set at heading size, never caption size.
+  if (p.format.sizeHalfPt === HEADING_SIZE_HALF_PT) return false;
+  if (text.length > MAX_CAPTION_CHARS) return false;
+
+  const title = text.replace(CAPTION_LABEL, "").trim();
+  // A bare "Figure 3" with no title is a cross-reference in running text, not
+  // a caption, and carries nothing to check.
+  if (title.length === 0) return false;
+
+  return !/^\p{Ll}/u.test(title);
+}
+
 export function checkTableFigureCaptions(doc: ParsedDocument): FindingDraft[] {
-  const captions = doc.paragraphs.filter(
-    (p) =>
-      /^(table|tabel|figure|gambar)\b/i.test(p.text.trim()) &&
-      p.format.sizeHalfPt !== HEADING_SIZE_HALF_PT,
-  );
+  const captions = doc.paragraphs.filter(isCaptionParagraph);
 
   if (captions.length === 0) return [];
 

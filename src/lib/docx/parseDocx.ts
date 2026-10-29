@@ -86,6 +86,25 @@ async function readDeclaredPageCount(zip: JSZip): Promise<number | null> {
  * schema — recovers every paragraph exactly once, in true reading order,
  * regardless of table nesting.
  */
+// KNOWN ISSUE — floating objects are read twice, and nested paragraphs once.
+//
+// Word writes a text box or grouped drawing twice: as DrawingML inside
+// <mc:Choice>, and again as legacy VML inside <mc:Fallback>. Both copies carry
+// the same <w:txbxContent>, so every paragraph inside one appears twice below,
+// which inflates the "X dari Y judul tabel/gambar" tally and can report a
+// single malformed caption as two.
+//
+// Discarding <mc:Fallback> is what the Markup Compatibility spec prescribes,
+// but on its own it loses content: the paragraph scanner here is not
+// nesting-aware, so a <w:p> inside a text box is swallowed by the <w:p> that
+// anchors the drawing instead of being emitted in its own right. Today the
+// duplicate is the only reason those paragraphs surface at all — in one real
+// submission, dropping the fallback made both table captions disappear from
+// the parse entirely. Fixing this properly means pairing <w:p> tags with a
+// stack and stopping run collection at a nested paragraph, which renumbers
+// every paragraph in every document and so shifts the "Paragraf N" references
+// that every rule reports.
+
 function extractParagraphsInDocumentOrder(documentXml: string): XmlNode[] {
   // Two independent alternatives (each with its own lazy attribute match),
   // not a shared prefix — a shared-prefix version greedily consumes the
