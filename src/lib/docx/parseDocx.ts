@@ -86,35 +86,51 @@ async function readDeclaredPageCount(zip: JSZip): Promise<number | null> {
  * schema — recovers every paragraph exactly once, in true reading order,
  * regardless of table nesting.
  */
-// KNOWN ISSUE — floating objects are read twice, and nested paragraphs once.
-//
-// Word writes a text box or grouped drawing twice: as DrawingML inside
-// <mc:Choice>, and again as legacy VML inside <mc:Fallback>. Both copies carry
-// the same <w:txbxContent>, so every paragraph inside one appears twice below,
-// which inflates the "X dari Y judul tabel/gambar" tally and can report a
-// single malformed caption as two.
-//
-// Discarding <mc:Fallback> is what the Markup Compatibility spec prescribes,
-// but on its own it loses content: the paragraph scanner here is not
-// nesting-aware, so a <w:p> inside a text box is swallowed by the <w:p> that
-// anchors the drawing instead of being emitted in its own right. Today the
-// duplicate is the only reason those paragraphs surface at all — in one real
-// submission, dropping the fallback made both table captions disappear from
-// the parse entirely. Fixing this properly means pairing <w:p> tags with a
-// stack and stopping run collection at a nested paragraph, which renumbers
-// every paragraph in every document and so shifts the "Paragraf N" references
-// that every rule reports.
-
+/**
+ * Scans document XML for <w:p> elements in true document reading order.
+ * Discards legacy <mc:Fallback> VML duplicates per the OOXML Markup Compatibility
+ * specification, and uses a tag-matching stack so nested paragraphs (such as captions
+ * inside text boxes) are cleanly emitted in their own right without being swallowed
+ * or duplicated.
+ */
 function extractParagraphsInDocumentOrder(documentXml: string): XmlNode[] {
-  // Two independent alternatives (each with its own lazy attribute match),
-  // not a shared prefix — a shared-prefix version greedily consumes the
-  // trailing "/" of a self-closing <w:p .../> as part of the attribute
-  // string, misdetecting it as a real open tag and swallowing everything up
-  // to the *next* paragraph's closing tag.
-  const fragmentPattern = /<w:p(?:\s[^>]*?)?\/>|<w:p(?:\s[^>]*?)?>[\s\S]*?<\/w:p>/g;
-  const fragments = documentXml.match(fragmentPattern) ?? [];
+  // 1. Strip legacy VML fallback blocks containing duplicate text boxes
+  const cleanXml = documentXml.replace(/<mc:Fallback(?:\s[^>]*?)?>[\s\S]*?<\/mc:Fallback>/g, "");
 
-  return fragments.map((fragment) => {
+  // 2. Scan tags with a stack to pair each <w:p> with its corresponding </w:p>
+  const tagPattern = /<(\/)?w:p(\b[^>]*?)?(\/)?>/g;
+  const stack: { startIndex: number }[] = [];
+  const fragmentsWithOrder: { startIndex: number; xml: string }[] = [];
+
+  let match: RegExpExecArray | null;
+  while ((match = tagPattern.exec(cleanXml)) !== null) {
+    const isClosing = match[1] === "/";
+    const isSelfClosing = match[3] === "/";
+
+    if (isSelfClosing) {
+      fragmentsWithOrder.push({
+        startIndex: match.index,
+        xml: match[0],
+      });
+    } else if (isClosing) {
+      if (stack.length > 0) {
+        const top = stack.pop()!;
+        fragmentsWithOrder.push({
+          startIndex: top.startIndex,
+          xml: cleanXml.slice(top.startIndex, match.index + match[0].length),
+        });
+      }
+    } else {
+      // Opening tag
+      stack.push({ startIndex: match.index });
+    }
+  }
+
+  // 3. Sort by original document position
+  fragmentsWithOrder.sort((a, b) => a.startIndex - b.startIndex);
+
+  // 4. Parse fragments into XmlNode
+  return fragmentsWithOrder.map(({ xml: fragment }) => {
     const wrapped = `<w:root>${fragment}</w:root>`;
     const parsed = parser.parse(wrapped) as XmlNode;
     const root = child(parsed, "w:root");
@@ -147,8 +163,9 @@ function collectRuns(node: unknown, acc: XmlNode[] = []): XmlNode[] {
     }
     for (const key of Object.keys(obj)) {
       // w:r already collected above; w:rPr/w:pPr are formatting properties,
-      // never containers for further runs.
-      if (key === "w:r" || key === "w:rPr" || key === "w:pPr") continue;
+      // never containers for further runs. Stop collection at nested paragraphs
+      // or text boxes so child paragraphs are not swallowed by outer containers.
+      if (key === "w:r" || key === "w:rPr" || key === "w:pPr" || key === "w:txbxContent" || key === "w:p") continue;
       collectRuns(obj[key], acc);
     }
   }

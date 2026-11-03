@@ -18,13 +18,18 @@ function StatusDonut({ manuscripts }: { manuscripts: Manuscript[] }) {
     return <p className="text-sm text-slate-500">Belum ada data.</p>;
   }
 
-  let cumulativePercent = 0;
-  const stops = slices.map((s) => {
-    const start = cumulativePercent;
-    const percent = (s.count / total) * 100;
-    cumulativePercent += percent;
-    return `${s.hexColor} ${start}% ${cumulativePercent}%`;
-  });
+  const stops = slices.reduce<{ list: string[]; current: number }>(
+    (acc, s) => {
+      const start = acc.current;
+      const percent = (s.count / total) * 100;
+      const next = start + percent;
+      return {
+        list: [...acc.list, `${s.hexColor} ${start}% ${next}%`],
+        current: next,
+      };
+    },
+    { list: [], current: 0 }
+  ).list;
 
   return (
     <div className="flex items-center gap-5">

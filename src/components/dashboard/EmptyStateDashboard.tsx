@@ -1,3 +1,4 @@
+import Link from "next/link";
 interface EmptyStateProps {
   variant: "no-manuscripts" | "no-results";
   onResetFilters?: () => void;
@@ -47,12 +48,12 @@ export default function EmptyStateDashboard({ variant, onResetFilters }: EmptySt
         Unggah naskah pertama untuk mulai memeriksa kesesuaiannya dengan template Jurnal
         Permukiman secara otomatis.
       </p>
-      <a
+      <Link
         href="/manuscripts/upload"
         className="mt-4 rounded-md bg-slate-900 px-3.5 py-2 text-sm font-medium text-white transition-[background-color,transform] duration-150 hover:bg-slate-800 active:scale-[0.97]"
       >
         Unggah Naskah Pertama
-      </a>
+      </Link>
     </div>
   );
 }
