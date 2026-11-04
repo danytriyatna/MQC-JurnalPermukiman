@@ -70,7 +70,7 @@ export default function AccountMenu({ userName, userEmail }: AccountMenuProps) {
       <button
         type="button"
         onClick={() => (isOpen ? closeMenu() : openMenu())}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-xs font-bold text-white ring-1 ring-white/30 transition-transform duration-150 hover:bg-white/30 active:scale-[0.94]"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 transition-transform duration-150 active:scale-[0.94]"
         aria-label={`Akun: ${userName}`}
         aria-expanded={isOpen}
         title={userName}
