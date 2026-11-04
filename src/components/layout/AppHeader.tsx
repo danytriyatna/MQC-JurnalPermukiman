@@ -41,7 +41,7 @@ export default async function AppHeader() {
         <div className="flex items-center gap-3">
           <Link
             href="/manuscripts/upload"
-            className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-[background-color,transform] duration-150 hover:bg-slate-800 active:scale-[0.97]"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#0b2545] border border-[#06172d] px-3 py-2 text-sm font-medium text-white shadow-sm transition-[background-color,transform] duration-150 hover:bg-[#143b6b] active:scale-[0.97]"
           >
             <svg
               className="h-4 w-4"
