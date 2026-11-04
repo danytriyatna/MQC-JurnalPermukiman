@@ -22,7 +22,7 @@ export default async function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
+    <header className="sticky top-0 z-10 border-b-2 border-[#c13d0d] bg-[#0b2545] shadow-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/dashboard" className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80">
           <Image
@@ -33,15 +33,15 @@ export default async function AppHeader() {
             className="rounded-md"
           />
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-slate-900">MQC Assistant</p>
-            <p className="text-xs text-slate-500">Jurnal Permukiman</p>
+            <p className="text-sm font-semibold text-white tracking-wide">MQC Assistant</p>
+            <p className="text-xs text-amber-200/90 font-medium">Jurnal Permukiman</p>
           </div>
         </Link>
 
         <div className="flex items-center gap-3">
           <Link
             href="/manuscripts/upload"
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#0b2545] border border-[#06172d] px-3 py-2 text-sm font-medium text-white shadow-sm transition-[background-color,transform] duration-150 hover:bg-[#143b6b] active:scale-[0.97]"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#c13d0d] border border-[#942e09] px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] duration-150 hover:bg-[#dd4812] active:scale-[0.97]"
           >
             <svg
               className="h-4 w-4"
