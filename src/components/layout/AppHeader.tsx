@@ -9,8 +9,8 @@ export default async function AppHeader() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let userName = "Pengguna";
-  const userEmail = user?.email ?? "";
+  let userName = process.env.NEXT_PUBLIC_DEV_MODE === "true" ? "Dany Triyatna" : "Pengguna";
+  const userEmail = user?.email ?? (process.env.NEXT_PUBLIC_DEV_MODE === "true" ? "dany@puskim.pu.go.id" : "");
 
   if (user) {
     const { data: profile } = await supabase

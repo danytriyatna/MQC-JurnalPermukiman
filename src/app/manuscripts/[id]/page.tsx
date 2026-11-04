@@ -19,6 +19,97 @@ interface PageProps {
 
 export default async function ManuscriptDetailPage({ params }: PageProps) {
   const { id } = await params;
+  if (process.env.NEXT_PUBLIC_DEV_MODE === "true" && id.startsWith("demo-")) {
+    const isPassed = id === "demo-mqc-1";
+    const demoFindings: FindingRowData[] = isPassed
+      ? [
+          {
+            id: "f-1",
+            section: "references_citation",
+            severity: "warning",
+            checkType: "manual_review_suggested",
+            location: "Daftar Pustaka [12]",
+            currentValue: "Sitasi artikel prosiding tanpa mencantumkan tautan DOI",
+            expectedValue: "Disarankan mencantumkan DOI aktif bila tersedia",
+            suggestedFix: "Periksa kembali DOI di Crossref atau repositori penerbit",
+          },
+        ]
+      : [
+          {
+            id: "f-2",
+            section: "abstract",
+            severity: "error",
+            checkType: "automated",
+            location: "Abstrak Bahasa Inggris",
+            currentValue: "Jumlah kata: 285 kata",
+            expectedValue: "Maksimal 200–250 kata sesuai template 2026",
+            suggestedFix: "Ringkas bagian latar belakang dan metodologi agar di bawah 250 kata",
+          },
+          {
+            id: "f-3",
+            section: "tables_figures_equations",
+            severity: "error",
+            checkType: "automated",
+            location: "Gambar 2 (Peta Sebaran)",
+            currentValue: "Judul gambar diletakkan di atas gambar",
+            expectedValue: "Judul gambar wajib diletakkan di bawah gambar dengan format Gambar 1. Judul",
+            suggestedFix: "Pindahkan caption gambar ke bagian bawah objek",
+          },
+          {
+            id: "f-4",
+            section: "title_author",
+            severity: "warning",
+            checkType: "manual_review_suggested",
+            location: "Afiliasi Penulis",
+            currentValue: "Afiliasi belum mencantumkan kode pos kementerian",
+            expectedValue: "Cantumkan nama instansi, kota, dan kode pos",
+            suggestedFix: "Tambahkan kode pos instansi pada baris afiliasi",
+          },
+        ];
+
+    const demoVersionRows: VersionHistoryItem[] = [
+      {
+        id: "v-1",
+        versionNumber: 1,
+        originalFileName: isPassed ? "Kajian_Kuat_Lentur_Balok_2026.docx" : "Pola_Sebaran_Permukiman_Pesisir.docx",
+        uploadedAt: new Date(Date.now() - 7200000).toISOString(),
+        parseStatus: "success",
+        uploadedBy: "Dany Triyatna",
+      },
+    ];
+
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <AppHeader />
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold text-slate-900">
+                  {isPassed
+                    ? "Kajian Kuat Lentur Balok Beton Bertulang dengan Agregat Daur Ulang"
+                    : "Analisis Pola Sebaran dan Kepadatan Permukiman Kumuh Pesisir Semarang"}
+                </h1>
+                <StatusBadge status={isPassed ? "passed" : "needs_revision"} />
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                File: {isPassed ? "Kajian_Kuat_Lentur_Balok_2026.docx" : "Pola_Sebaran_Permukiman_Pesisir.docx"} · Diunggah oleh Dany Triyatna
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <FindingsView findings={demoFindings} parseErrorMessage={null} />
+            </div>
+            <div className="space-y-6">
+              <VersionHistoryList versions={demoVersionRows} currentVersionId="v-1" />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const supabase = await createClient();
 
   const { data: manuscript, error } = await supabase
