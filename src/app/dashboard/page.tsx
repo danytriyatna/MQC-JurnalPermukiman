@@ -2,6 +2,21 @@ import AppHeader from "@/components/layout/AppHeader";
 import ManuscriptDashboard from "@/components/dashboard/ManuscriptDashboard";
 import { createClient } from "@/lib/supabase/server";
 import { mapManuscriptRow, type ManuscriptRow } from "@/lib/supabase/mappers";
+import fs from "fs/promises";
+import path from "path";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+async function getOjsSyncedSubmissions() {
+  try {
+    const filePath = path.join(process.cwd(), "data", "ojs_synced_submissions.json");
+    const raw = await fs.readFile(filePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -49,17 +64,32 @@ export default async function DashboardPage() {
     ];
   }
 
+  // Gabungkan naskah yang disinkronkan secara otomatis dari OJS ke daftar paling atas
+  const ojsSubmissions = await getOjsSyncedSubmissions();
+  if (ojsSubmissions.length > 0) {
+    const ojsIds = new Set(ojsSubmissions.map((s: any) => s.id));
+    const remaining = manuscripts.filter((m) => !ojsIds.has(m.id));
+    manuscripts = [...ojsSubmissions, ...remaining];
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <div className="mb-5">
-          <h1 className="text-lg font-semibold text-slate-900">Riwayat Naskah</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Pantau status pemeriksaan kesesuaian naskah dengan template Jurnal Permukiman.
-          </p>
+        <div className="mb-5 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-900">Antrean & Riwayat Naskah</h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Daftar naskah masuk terpadu dari portal <strong>OJS Jurnal Permukiman</strong> dan riwayat pemeriksaan format mandiri.
+            </p>
+          </div>
+          {ojsSubmissions.length > 0 && (
+            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              🟢 Terhubung ke OJS ({ojsSubmissions.length} Naskah Terintegrasi)
+            </span>
+          )}
         </div>
-        {error && process.env.NEXT_PUBLIC_DEV_MODE !== "true" ? (
+        {error && process.env.NEXT_PUBLIC_DEV_MODE !== "true" && ojsSubmissions.length === 0 ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             Gagal memuat data naskah. Coba muat ulang halaman.
           </div>

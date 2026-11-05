@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ojs-522",
+    "ojs_submission_id": 522,
+    "title": "Penerapan Teknologi Ramah Lingkungan pada Permukiman Perkotaan",
+    "originalFileName": "Template_Jurnal_Permukiman_2026.docx",
+    "uploadedBy": "Dany Triyatna & Tim Peneliti Puskim",
+    "status": "needs_revision",
+    "versionNumber": 1,
+    "totalRulesChecked": 27,
+    "totalRulesPassed": 15,
+    "errorFindings": 10,
+    "warningFindings": 2,
+    "score": 56,
+    "filePath": "C:/Users/DTProject/Documents/Git/jurnalpermukiman/public/Template.docx",
+    "source": "OJS_SYNC",
+    "createdAt": "2026-11-05T08:47:34.508Z",
+    "updatedAt": "2026-11-05T08:47:34.508Z"
+  },
+  {
+    "id": "ojs-521",
+    "ojs_submission_id": 521,
+    "title": "Evaluasi Karakteristik Material Dinding Panel Pracetak Ramah Lingkungan",
+    "originalFileName": "Naskah_Dinding_Panel_Pracetak.docx",
+    "uploadedBy": "Ir. Dany Triyatna, M.Sc",
+    "status": "passed",
+    "versionNumber": 1,
+    "totalRulesChecked": 25,
+    "totalRulesPassed": 25,
+    "errorFindings": 0,
+    "warningFindings": 0,
+    "score": 100,
+    "filePath": null,
+    "source": "OJS_SYNC",
+    "createdAt": "2026-11-05T08:46:07.266Z",
+    "updatedAt": "2026-11-05T08:46:07.266Z"
+  }
+]
