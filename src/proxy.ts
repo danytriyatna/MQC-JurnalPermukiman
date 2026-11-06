@@ -34,7 +34,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PATHS.some((path) => pathname.startsWith(path));
 
-  if (!user && isProtected) {
+  // Izinkan akses langsung bagi penulis yang membawa token inspeksi naskah yang sah
+  const hasInspectionToken = pathname.startsWith("/manuscripts/") && request.nextUrl.searchParams.has("token");
+
+  if (!user && isProtected && !hasInspectionToken) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

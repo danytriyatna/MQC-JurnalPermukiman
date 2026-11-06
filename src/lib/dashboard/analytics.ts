@@ -12,13 +12,14 @@ export interface StatusSlice {
 // the pie chart's segments stay visually consistent with StatusBadge/dots
 // used everywhere else in the app rather than introducing a new palette.
 const STATUS_HEX: Record<ManuscriptStatus, string> = {
+  pending: "#3b82f6", // blue-500
   passed: "#10b981", // emerald-500
   needs_revision: "#f59e0b", // amber-500
   processing: "#0ea5e9", // sky-500
   processing_failed: "#f43f5e", // rose-500
 };
 
-const STATUS_ORDER: ManuscriptStatus[] = ["passed", "needs_revision", "processing", "processing_failed"];
+const STATUS_ORDER: ManuscriptStatus[] = ["pending", "passed", "needs_revision", "processing", "processing_failed"];
 
 export function statusDistribution(manuscripts: Manuscript[]): StatusSlice[] {
   return STATUS_ORDER.map((status) => ({

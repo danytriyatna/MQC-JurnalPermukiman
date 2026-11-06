@@ -5,6 +5,7 @@ import { statusMeta } from "@/lib/status";
 
 const STATUS_FILTERS: { value: ManuscriptStatus | "all"; label: string }[] = [
   { value: "all", label: "Semua" },
+  { value: "pending", label: statusMeta.pending.label },
   { value: "needs_revision", label: statusMeta.needs_revision.label },
   { value: "passed", label: statusMeta.passed.label },
   { value: "processing", label: statusMeta.processing.label },

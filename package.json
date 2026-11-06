@@ -6,15 +6,25 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:db": "tsx --test tests/db.test.ts",
+    "test:api": "tsx --test tests/api_check_submission.test.ts",
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
     "docx": "^9.7.1",
+    "drizzle-orm": "^0.45.4",
     "fast-xml-parser": "^5.11.0",
+    "jose": "^6.2.15",
     "jszip": "^3.10.1",
     "next": "16.3.1",
+    "postgres": "^4.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -23,10 +33,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "playwright": "^1.62.1",
     "tailwindcss": "^4",
+    "tsx": "^4.19.3",
     "typescript": "^5"
   }
 }

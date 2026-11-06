@@ -16,6 +16,18 @@ function DocumentIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function ClockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+      />
+    </svg>
+  );
+}
+
 function CheckBadgeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" {...props}>
@@ -50,6 +62,13 @@ export default function DashboardStats({ manuscripts }: { manuscripts: Manuscrip
       iconColor: "text-indigo-600",
     },
     {
+      label: "Menunggu Pemeriksaan",
+      value: countBy(manuscripts, "pending"),
+      Icon: ClockIcon,
+      iconBg: "bg-blue-50",
+      iconColor: "text-blue-600",
+    },
+    {
       label: "Lolos",
       value: countBy(manuscripts, "passed"),
       Icon: CheckBadgeIcon,
@@ -66,7 +85,7 @@ export default function DashboardStats({ manuscripts }: { manuscripts: Manuscrip
   ];
 
   return (
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map(({ label, value, Icon, iconBg, iconColor }) => (
         <div
           key={label}

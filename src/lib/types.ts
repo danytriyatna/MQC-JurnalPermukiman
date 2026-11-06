@@ -1,4 +1,5 @@
 export type ManuscriptStatus =
+  | "pending"
   | "processing"
   | "needs_revision"
   | "passed"

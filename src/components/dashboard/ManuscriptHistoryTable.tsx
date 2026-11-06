@@ -18,8 +18,8 @@ function avatarColorFor(name: string): string {
 }
 
 function ComplianceCell({ manuscript }: { manuscript: Manuscript }) {
-  if (manuscript.status === "processing") {
-    return <span className="text-sm text-slate-400">—</span>;
+  if (manuscript.status === "processing" || manuscript.status === "pending") {
+    return <span className="text-sm text-slate-400">Menunggu pemeriksaan</span>;
   }
   if (manuscript.status === "processing_failed") {
     return <span className="text-sm text-slate-400">Tidak dapat dianalisis</span>;

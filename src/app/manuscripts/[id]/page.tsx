@@ -12,118 +12,265 @@ import ReferenceVerificationPanel, {
 import { createClient } from "@/lib/supabase/server";
 import { formatDateID } from "@/lib/status";
 import { ManuscriptStatus } from "@/lib/types";
+import {
+  db,
+  manuscripts as manuscriptsTable,
+  manuscriptVersions,
+  screeningRuns,
+  findings as findingsTable,
+  referenceCheckRuns,
+  referenceChecks as referenceChecksTable,
+  users,
+} from "@/db";
+import { eq, desc } from "drizzle-orm";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ token?: string }>;
 }
 
-export default async function ManuscriptDetailPage({ params }: PageProps) {
+export default async function ManuscriptDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const supabase = await createClient();
+  const { token } = await searchParams;
 
-  const { data: manuscript, error } = await supabase
-    .from("manuscripts")
-    .select(
-      "id, title, original_file_name, status, version_number, total_rules_checked, total_rules_passed, error_findings, warning_findings, created_at, updated_at, current_version_id, deleted_at, uploaded_by_profile:profiles!uploaded_by(full_name)",
-    )
-    .eq("id", id)
-    .single();
-
-  if (error || !manuscript || manuscript.deleted_at) {
-    notFound();
-  }
-
-  const uploadedByProfile = Array.isArray(manuscript.uploaded_by_profile)
-    ? manuscript.uploaded_by_profile[0]
-    : manuscript.uploaded_by_profile;
-
+  // 1. Coba ambil data dari basis data lokal PostgreSQL (mqc_db) via Drizzle ORM
+  let manuscript: any = null;
   let parseErrorMessage: string | null = null;
   let findings: FindingRowData[] = [];
   let referenceRun: ReferenceRunData | null = null;
   let referenceChecks: ReferenceCheckRowData[] = [];
+  let versions: VersionHistoryItem[] = [];
+  let uploaderDisplayName = "—";
 
-  if (manuscript.current_version_id) {
-    const { data: version } = await supabase
-      .from("manuscript_versions")
-      .select("id, parse_status, parse_error_message")
-      .eq("id", manuscript.current_version_id)
-      .single();
+  try {
+    const localManuscriptRows = await db
+      .select({
+        id: manuscriptsTable.id,
+        title: manuscriptsTable.title,
+        original_file_name: manuscriptsTable.originalFileName,
+        status: manuscriptsTable.status,
+        version_number: manuscriptsTable.versionNumber,
+        total_rules_checked: manuscriptsTable.totalRulesChecked,
+        total_rules_passed: manuscriptsTable.totalRulesPassed,
+        error_findings: manuscriptsTable.errorFindings,
+        warning_findings: manuscriptsTable.warningFindings,
+        created_at: manuscriptsTable.createdAt,
+        updated_at: manuscriptsTable.updatedAt,
+        current_version_id: manuscriptsTable.currentVersionId,
+        deleted_at: manuscriptsTable.deletedAt,
+        author_name: manuscriptsTable.authorName,
+        uploader_name: users.fullName,
+      })
+      .from(manuscriptsTable)
+      .leftJoin(users, eq(users.id, manuscriptsTable.uploadedBy))
+      .where(eq(manuscriptsTable.id, id))
+      .limit(1);
 
-    parseErrorMessage = version?.parse_error_message ?? null;
+    if (localManuscriptRows.length > 0) {
+      manuscript = localManuscriptRows[0];
+      uploaderDisplayName = manuscript.author_name || manuscript.uploader_name || "Penulis OJS";
 
-    if (version) {
-      const { data: run } = await supabase
-        .from("screening_runs")
-        .select("id")
-        .eq("manuscript_version_id", version.id)
-        .order("run_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      if (manuscript.current_version_id) {
+        // Ambil versi aktif
+        const versionRows = await db
+          .select()
+          .from(manuscriptVersions)
+          .where(eq(manuscriptVersions.id, manuscript.current_version_id))
+          .limit(1);
 
-      if (run) {
-        const { data: findingRows } = await supabase
-          .from("findings")
-          .select("id, section, severity, check_type, location, current_value, expected_value, suggested_fix")
-          .eq("screening_run_id", run.id);
+        if (versionRows.length > 0) {
+          const currentVer = versionRows[0];
+          parseErrorMessage = currentVer.parseErrorMessage;
 
-        findings = (findingRows ?? []).map((f) => ({
-          id: f.id,
-          section: f.section,
-          severity: f.severity,
-          checkType: f.check_type,
-          location: f.location,
-          currentValue: f.current_value,
-          expectedValue: f.expected_value,
-          suggestedFix: f.suggested_fix,
-        }));
+          // Ambil screening run terbaru
+          const runRows = await db
+            .select()
+            .from(screeningRuns)
+            .where(eq(screeningRuns.manuscriptVersionId, currentVer.id))
+            .orderBy(desc(screeningRuns.runAt))
+            .limit(1);
+
+          if (runRows.length > 0) {
+            const currentRun = runRows[0];
+            const localFindingRows = await db
+              .select()
+              .from(findingsTable)
+              .where(eq(findingsTable.screeningRunId, currentRun.id));
+
+            findings = localFindingRows.map((f) => ({
+              id: f.id,
+              section: f.section as any,
+              severity: f.severity as any,
+              checkType: f.checkType as any,
+              location: f.location,
+              currentValue: f.currentValue,
+              expectedValue: f.expectedValue,
+              suggestedFix: f.suggestedFix,
+            }));
+          }
+
+          // Ambil reference run bila ada
+          const refRunRows = await db
+            .select()
+            .from(referenceCheckRuns)
+            .where(eq(referenceCheckRuns.manuscriptVersionId, currentVer.id))
+            .orderBy(desc(referenceCheckRuns.startedAt))
+            .limit(1);
+
+          if (refRunRows.length > 0) {
+            const refRun = refRunRows[0];
+            referenceRun = {
+              id: refRun.id,
+              source_set_version: refRun.sourceSetVersion,
+              total_references: refRun.totalReferences,
+              started_at: refRun.startedAt.toISOString(),
+              completed_at: refRun.completedAt ? refRun.completedAt.toISOString() : null,
+            };
+
+            const refCheckRows = await db
+              .select()
+              .from(referenceChecksTable)
+              .where(eq(referenceChecksTable.runId, refRun.id))
+              .orderBy(referenceChecksTable.entryIndex);
+
+            referenceChecks = refCheckRows.map((rc) => ({
+              id: rc.id,
+              entry_index: rc.entryIndex ?? 0,
+              raw_text: rc.rawText,
+              kind: rc.kind as any,
+              doi: rc.doi,
+              url: rc.url,
+              verdict: rc.verdict as any,
+              confidence: rc.confidence as any,
+              note: rc.note,
+              match_source: rc.matchSource,
+              match_title: rc.matchTitle,
+              match_year: rc.matchYear,
+              match_url: rc.matchUrl,
+              match_similarity: rc.matchSimilarity,
+            }));
+          }
+        }
       }
 
-      // Reference verification is stored per version and re-runnable, so the
-      // most recent run is shown and the panel can start another.
-      const { data: refRun } = await supabase
-        .from("reference_check_runs")
-        .select("id, source_set_version, total_references, started_at, completed_at")
-        .eq("manuscript_version_id", version.id)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Ambil seluruh riwayat versi
+      const allVersions = await db
+        .select({
+          id: manuscriptVersions.id,
+          versionNumber: manuscriptVersions.versionNumber,
+          originalFileName: manuscriptVersions.originalFileName,
+          uploadedAt: manuscriptVersions.uploadedAt,
+          parseStatus: manuscriptVersions.parseStatus,
+          authorName: manuscriptsTable.authorName,
+          uploaderName: users.fullName,
+        })
+        .from(manuscriptVersions)
+        .innerJoin(manuscriptsTable, eq(manuscriptsTable.id, manuscriptVersions.manuscriptId))
+        .leftJoin(users, eq(users.id, manuscriptVersions.uploadedBy))
+        .where(eq(manuscriptVersions.manuscriptId, id))
+        .orderBy(desc(manuscriptVersions.versionNumber));
 
-      if (refRun) {
-        referenceRun = refRun;
-        const { data: refChecks } = await supabase
-          .from("reference_checks")
+      versions = allVersions.map((v) => ({
+        id: v.id,
+        versionNumber: v.versionNumber,
+        originalFileName: v.originalFileName,
+        uploadedAt: v.uploadedAt.toISOString(),
+        uploadedBy: v.authorName || v.uploaderName || "Penulis OJS",
+        parseStatus: v.parseStatus as any,
+      }));
+    }
+  } catch (err) {
+    console.error("Gagal membaca detail naskah dari database lokal Drizzle:", err);
+  }
+
+  // 2. Fallback ke Supabase jika naskah tidak ada di database lokal
+  if (!manuscript) {
+    try {
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("manuscripts")
+        .select(
+          "id, title, original_file_name, status, version_number, total_rules_checked, total_rules_passed, error_findings, warning_findings, created_at, updated_at, current_version_id, deleted_at, uploaded_by_profile:profiles!uploaded_by(full_name)",
+        )
+        .eq("id", id)
+        .single();
+
+      if (!error && data) {
+        manuscript = data;
+        const uploadedByProfile = Array.isArray(manuscript.uploaded_by_profile)
+          ? manuscript.uploaded_by_profile[0]
+          : manuscript.uploaded_by_profile;
+        uploaderDisplayName = uploadedByProfile?.full_name ?? "—";
+
+        if (manuscript.current_version_id) {
+          const { data: ver } = await supabase
+            .from("manuscript_versions")
+            .select("id, parse_status, parse_error_message")
+            .eq("id", manuscript.current_version_id)
+            .single();
+
+          parseErrorMessage = ver?.parse_error_message ?? null;
+
+          if (ver) {
+            const { data: run } = await supabase
+              .from("screening_runs")
+              .select("id")
+              .eq("manuscript_version_id", ver.id)
+              .order("run_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (run) {
+              const { data: findingRows } = await supabase
+                .from("findings")
+                .select("id, section, severity, check_type, location, current_value, expected_value, suggested_fix")
+                .eq("screening_run_id", run.id);
+
+              findings = (findingRows ?? []).map((f) => ({
+                id: f.id,
+                section: f.section,
+                severity: f.severity,
+                checkType: f.check_type,
+                location: f.location,
+                currentValue: f.current_value,
+                expectedValue: f.expected_value,
+                suggestedFix: f.suggested_fix,
+              }));
+            }
+          }
+        }
+
+        const { data: versionRows } = await supabase
+          .from("manuscript_versions")
           .select(
-            "id, entry_index, raw_text, kind, doi, url, verdict, confidence, note, match_source, match_title, match_year, match_url, match_similarity",
+            "id, version_number, original_file_name, uploaded_at, parse_status, uploaded_by_profile:profiles!uploaded_by(full_name)",
           )
-          .eq("run_id", refRun.id)
-          .order("entry_index", { ascending: true });
+          .eq("manuscript_id", id)
+          .order("version_number", { ascending: false });
 
-        referenceChecks = (refChecks ?? []) as ReferenceCheckRowData[];
+        versions = (versionRows ?? []).map((v) => {
+          const profile = Array.isArray(v.uploaded_by_profile) ? v.uploaded_by_profile[0] : v.uploaded_by_profile;
+          return {
+            id: v.id,
+            versionNumber: v.version_number,
+            originalFileName: v.original_file_name,
+            uploadedAt: v.uploaded_at,
+            uploadedBy: profile?.full_name ?? "—",
+            parseStatus: v.parse_status,
+          };
+        });
       }
+    } catch {
+      // Supabase offline
     }
   }
 
-  const { data: versionRows } = await supabase
-    .from("manuscript_versions")
-    .select(
-      "id, version_number, original_file_name, uploaded_at, parse_status, uploaded_by_profile:profiles!uploaded_by(full_name)",
-    )
-    .eq("manuscript_id", id)
-    .order("version_number", { ascending: false });
-
-  const versions: VersionHistoryItem[] = (versionRows ?? []).map((v) => {
-    const profile = Array.isArray(v.uploaded_by_profile) ? v.uploaded_by_profile[0] : v.uploaded_by_profile;
-    return {
-      id: v.id,
-      versionNumber: v.version_number,
-      originalFileName: v.original_file_name,
-      uploadedAt: v.uploaded_at,
-      uploadedBy: profile?.full_name ?? "—",
-      parseStatus: v.parse_status,
-    };
-  });
+  if (!manuscript || manuscript.deleted_at) {
+    notFound();
+  }
 
   const status = manuscript.status as ManuscriptStatus;
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -138,7 +285,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
             <h1 className="text-lg font-semibold text-slate-900">{manuscript.title}</h1>
             <p className="mt-0.5 text-sm text-slate-500">
               {manuscript.original_file_name} · versi {manuscript.version_number} · diunggah oleh{" "}
-              {uploadedByProfile?.full_name ?? "—"} · {formatDateID(manuscript.updated_at)}
+              {uploaderDisplayName} · {formatDateID(manuscript.updated_at instanceof Date ? manuscript.updated_at.toISOString() : manuscript.updated_at)}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -146,7 +293,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
             {manuscript.current_version_id && (
               <>
                 <a
-                  href={`/api/manuscripts/${manuscript.id}/original`}
+                  href={`/api/manuscripts/${manuscript.id}/original${tokenQuery}`}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97]"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
@@ -155,7 +302,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
                   File Asli
                 </a>
                 <a
-                  href={`/api/manuscripts/${manuscript.id}/report`}
+                  href={`/api/manuscripts/${manuscript.id}/report${tokenQuery}`}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97]"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
@@ -169,7 +316,27 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {status === "processing_failed" ? (
+        {status === "pending" ? (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-5 text-sm text-blue-900 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">📋</span>
+              <div>
+                <h3 className="font-semibold text-blue-950">Menunggu Pemeriksaan Redaksi</h3>
+                <p className="mt-1 text-blue-800">
+                  Naskah ini telah berhasil diterima dan saat ini berada di dalam antrean tugas pemeriksaan Tim Redaksi Jurnal Permukiman. Hasil penapisan format dan verifikasi referensi akan ditampilkan di sini setelah redaksi menjalankan pemeriksaan.
+                </p>
+                <div className="mt-3">
+                  <a
+                    href="/dashboard"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+                  >
+                    Buka Antrean Pemeriksaan di Dashboard &rarr;
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : status === "processing_failed" ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             <p className="font-medium">Gagal memproses naskah</p>
             <p className="mt-1">{parseErrorMessage ?? "Dokumen tidak dapat dibaca sistem."}</p>
