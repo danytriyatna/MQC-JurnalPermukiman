@@ -2,10 +2,10 @@ import fs from "fs/promises";
 import path from "path";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { screenManuscript } from "@/lib/docx/screenManuscript";
 import AppHeader from "@/components/layout/AppHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import FindingsView, { FindingRowData } from "@/components/findings/FindingsView";
+import type { FindingSection } from "@/lib/docx/types";
 import VersionHistoryList, { VersionHistoryItem } from "@/components/manuscripts/VersionHistoryList";
 import RevisionUploadSection from "@/components/manuscripts/RevisionUploadSection";
 import DeleteManuscriptButton from "@/components/manuscripts/DeleteManuscriptButton";
@@ -13,6 +13,7 @@ import ReferenceVerificationPanel, {
   ReferenceCheckRowData,
   ReferenceRunData,
 } from "@/components/references/ReferenceVerificationPanel";
+import { screenManuscript } from "@/lib/docx/screenManuscript";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateID } from "@/lib/status";
 import { ManuscriptStatus } from "@/lib/types";
@@ -21,10 +22,236 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+interface DetailLayoutProps {
+  title: string;
+  fileName: string;
+  versionNumber: number;
+  uploadedBy: string;
+  updatedAt: string;
+  status: ManuscriptStatus;
+  totalRulesChecked: number;
+  totalRulesPassed: number;
+  errorFindings: number;
+  warningFindings: number;
+  findings: FindingRowData[];
+  versions: VersionHistoryItem[];
+  parseErrorMessage?: string | null;
+  sourceLabel?: string;
+  manuscriptActions?: React.ReactNode;
+  extraMainContent?: React.ReactNode;
+  extraSidebarContent?: React.ReactNode;
+}
+
+const TEMPLATE_SECTION_ORDER: FindingSection[] = [
+  "title_author",
+  "abstract",
+  "structure_heading",
+  "tables_figures_equations",
+  "references_citation",
+];
+
+const TEMPLATE_SECTION_LABELS: Record<FindingSection, string> = {
+  title_author: "Judul & Penulis",
+  abstract: "Abstrak",
+  structure_heading: "Struktur & Heading",
+  tables_figures_equations: "Tabel, Gambar, Persamaan",
+  references_citation: "Referensi & Sitasi",
+};
+
+function SectionSummaryCard({ findings }: { findings: FindingRowData[] }) {
+  return (
+    <div className="fresh-card overflow-hidden rounded-2xl">
+      <div className="flex items-center justify-between border-b border-[#EFEAE4] bg-[#FAF8F5]/90 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-[#C13D0D]" aria-hidden="true" />
+          <h3 className="text-sm font-bold text-stone-900">Kelengkapan Bagian Template</h3>
+        </div>
+        <span className="text-xs font-semibold text-stone-500">5 seksi</span>
+      </div>
+      <ul className="divide-y divide-[#EFEAE4]">
+        {TEMPLATE_SECTION_ORDER.map((section) => {
+          const items = findings.filter((f) => f.section === section);
+          const errors = items.filter((f) => f.severity === "error").length;
+          const warnings = items.filter((f) => f.severity === "warning").length;
+
+          return (
+            <li key={section} className="flex items-center justify-between gap-3 px-4 py-3">
+              <span className="text-sm font-medium text-stone-800">
+                {TEMPLATE_SECTION_LABELS[section]}
+              </span>
+              {errors === 0 && warnings === 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                  Sesuai
+                </span>
+              ) : errors > 0 ? (
+                <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20">
+                  {errors} wajib{warnings > 0 ? ` · ${warnings} saran` : ""}
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                  {warnings} disarankan
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function ManuscriptDetailShell({
+  title,
+  fileName,
+  versionNumber,
+  uploadedBy,
+  updatedAt,
+  status,
+  totalRulesChecked,
+  totalRulesPassed,
+  errorFindings,
+  warningFindings,
+  findings,
+  versions,
+  parseErrorMessage,
+  sourceLabel,
+  manuscriptActions,
+  extraMainContent,
+  extraSidebarContent,
+}: DetailLayoutProps) {
+  const compliancePercent =
+    totalRulesChecked > 0 ? Math.round((totalRulesPassed / totalRulesChecked) * 100) : 0;
+
+  return (
+    <div className="flex min-h-screen flex-col puskim-canvas">
+      <AppHeader />
+      <main className="mx-auto w-full max-w-[1760px] flex-1 px-4 py-5 sm:px-6 lg:px-8">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#DFD9D2] bg-white px-3 py-1.5 text-xs font-semibold text-[#A0320A] shadow-xs transition-colors hover:border-[#F4D4C9] hover:bg-[#FDF4F0]"
+          >
+            <span aria-hidden="true">&larr;</span>
+            Kembali ke Antrean &amp; Riwayat Naskah
+          </Link>
+          {sourceLabel && (
+            <span className="rounded-full border border-[#DFD9D2] bg-white px-3 py-1 text-xs font-semibold text-stone-600 shadow-xs">
+              {sourceLabel}
+            </span>
+          )}
+        </div>
+
+        <div className="fresh-card mb-5 rounded-2xl border-t-[3px] border-t-[#C13D0D] p-5">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-xl font-bold tracking-tight text-stone-900">{title}</h1>
+                <StatusBadge status={status} />
+              </div>
+              <p className="mt-1.5 text-sm text-stone-600">
+                Berkas: <span className="font-mono text-xs text-stone-800">{fileName}</span> · Versi{" "}
+                {versionNumber} · Penulis:{" "}
+                <strong className="font-semibold text-stone-800">{uploadedBy}</strong> · Diperbarui:{" "}
+                {formatDateID(updatedAt)}
+              </p>
+              {manuscriptActions && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">{manuscriptActions}</div>
+              )}
+            </div>
+
+            {status !== "processing_failed" && totalRulesChecked > 0 && (
+              <div className="w-full shrink-0 rounded-xl border border-[#F4D4C9] bg-[#FDF4F0]/80 px-4 py-3 lg:w-72">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-semibold text-[#A0320A]">Kepatuhan Template</span>
+                  <span className="text-xs font-bold tabular-nums text-[#C13D0D]">
+                    {compliancePercent}%
+                  </span>
+                </div>
+                <p className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
+                  {totalRulesPassed}/{totalRulesChecked}{" "}
+                  <span className="text-xs font-medium text-stone-600">aturan terpenuhi</span>
+                </p>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white ring-1 ring-[#F4D4C9]">
+                  <div
+                    className={`h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out)] ${
+                      errorFindings > 0 ? "bg-amber-500" : "bg-emerald-600"
+                    }`}
+                    style={{ transform: `scaleX(${totalRulesPassed / totalRulesChecked})` }}
+                  />
+                </div>
+                {(errorFindings > 0 || warningFindings > 0) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium">
+                    {errorFindings > 0 && (
+                      <span className="text-rose-700">{errorFindings} wajib diperbaiki</span>
+                    )}
+                    {warningFindings > 0 && (
+                      <span className="text-amber-700">{warningFindings} disarankan</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          <div className="space-y-5 lg:col-span-8">
+            {status === "processing_failed" || parseErrorMessage ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+                <p className="font-semibold">Gagal memproses naskah</p>
+                <p className="mt-1">{parseErrorMessage ?? "Dokumen tidak dapat dibaca sistem."}</p>
+              </div>
+            ) : (
+              <FindingsView findings={findings} />
+            )}
+            {extraMainContent}
+          </div>
+
+          <div className="space-y-5 lg:col-span-4">
+            <SectionSummaryCard findings={findings} />
+            <VersionHistoryList versions={versions} />
+            {extraSidebarContent}
+          </div>
+        </div>
+      </main>
+
+      <footer className="mt-auto border-t border-[#DFD9D2] bg-white/80 backdrop-blur-xs">
+        <div className="mx-auto flex w-full max-w-[1760px] flex-col items-start justify-between gap-2 px-4 py-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-[#C13D0D]" aria-hidden="true" />
+            <span>
+              <strong className="font-semibold text-stone-700">MQC Assistant</strong> · Jurnal
+              Permukiman — Direktorat Bina Teknik Permukiman dan Perumahan, Kementerian PU
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <a
+              href="http://localhost/jurnalpermukiman/index.php/JP"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#A0320A] transition-colors hover:underline"
+            >
+              Portal OJS Jurnal Permukiman ↗
+            </a>
+            <Link
+              href="/manuscripts/upload"
+              className="font-medium text-stone-600 transition-colors hover:text-[#A0320A]"
+            >
+              Unggah Naskah
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 export default async function ManuscriptDetailPage({ params }: PageProps) {
   const { id } = await params;
+
   if (process.env.NEXT_PUBLIC_DEV_MODE === "true" && id.startsWith("demo-")) {
     const isPassed = id === "demo-mqc-1";
+    const demoUpdatedAt = isPassed ? "2026-11-10T07:26:00.000Z" : "2026-11-09T21:26:00.000Z";
     const demoFindings: FindingRowData[] = isPassed
       ? [
           {
@@ -56,7 +283,8 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
             checkType: "automated",
             location: "Gambar 2 (Peta Sebaran)",
             currentValue: "Judul gambar diletakkan di atas gambar",
-            expectedValue: "Judul gambar wajib diletakkan di bawah gambar dengan format Gambar 1. Judul",
+            expectedValue:
+              "Judul gambar wajib diletakkan di bawah gambar dengan format Gambar 1. Judul",
             suggestedFix: "Pindahkan caption gambar ke bagian bawah objek",
           },
           {
@@ -71,46 +299,39 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
           },
         ];
 
-    const demoVersionRows: VersionHistoryItem[] = [
-      {
-        id: "v-1",
-        versionNumber: 1,
-        originalFileName: isPassed ? "Kajian_Kuat_Lentur_Balok_2026.docx" : "Pola_Sebaran_Permukiman_Pesisir.docx",
-        uploadedAt: new Date(Date.now() - 7200000).toISOString(),
-        parseStatus: "success",
-        uploadedBy: "Dany Triyatna",
-      },
-    ];
+    const demoFile = isPassed
+      ? "Kajian_Kuat_Lentur_Balok_2026.docx"
+      : "Pola_Sebaran_Permukiman_Pesisir.docx";
 
     return (
-      <div className="min-h-screen bg-slate-50">
-        <AppHeader />
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold text-slate-900">
-                  {isPassed
-                    ? "Kajian Kuat Lentur Balok Beton Bertulang dengan Agregat Daur Ulang"
-                    : "Analisis Pola Sebaran dan Kepadatan Permukiman Kumuh Pesisir Semarang"}
-                </h1>
-                <StatusBadge status={isPassed ? "passed" : "needs_revision"} />
-              </div>
-              <p className="mt-1 text-sm text-slate-500">
-                File: {isPassed ? "Kajian_Kuat_Lentur_Balok_2026.docx" : "Pola_Sebaran_Permukiman_Pesisir.docx"} · Diunggah oleh Dany Triyatna
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <FindingsView findings={demoFindings} parseErrorMessage={null} />
-            </div>
-            <div className="space-y-6">
-              <VersionHistoryList versions={demoVersionRows} currentVersionId="v-1" />
-            </div>
-          </div>
-        </main>
-      </div>
+      <ManuscriptDetailShell
+        title={
+          isPassed
+            ? "Kajian Kuat Lentur Balok Beton Bertulang dengan Agregat Daur Ulang"
+            : "Analisis Pola Sebaran dan Kepadatan Permukiman Kumuh Pesisir Semarang"
+        }
+        fileName={demoFile}
+        versionNumber={isPassed ? 1 : 2}
+        uploadedBy="Dany Triyatna"
+        updatedAt={demoUpdatedAt}
+        status={isPassed ? "passed" : "needs_revision"}
+        totalRulesChecked={25}
+        totalRulesPassed={isPassed ? 24 : 19}
+        errorFindings={isPassed ? 0 : 2}
+        warningFindings={isPassed ? 1 : 4}
+        findings={demoFindings}
+        versions={[
+          {
+            id: "v-1",
+            versionNumber: isPassed ? 1 : 2,
+            originalFileName: demoFile,
+            uploadedAt: demoUpdatedAt,
+            parseStatus: "success",
+            uploadedBy: "Dany Triyatna",
+          },
+        ]}
+        sourceLabel="Pemeriksaan Format Mandiri"
+      />
     );
   }
 
@@ -124,6 +345,8 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
       versionNumber?: number;
       totalRulesChecked?: number;
       totalRulesPassed?: number;
+      errorFindings?: number;
+      warningFindings?: number;
       filePath?: string | null;
       updatedAt: string;
     } | null = null;
@@ -131,7 +354,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
     try {
       const storePath = path.join(process.cwd(), "data", "ojs_synced_submissions.json");
       const raw = await fs.readFile(storePath, "utf-8");
-      const list = JSON.parse(raw) as typeof ojsItem[];
+      const list = JSON.parse(raw) as (typeof ojsItem)[];
       ojsItem = list.find((m) => m?.id === id) ?? null;
     } catch {
       ojsItem = null;
@@ -158,63 +381,37 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
           suggestedFix: f.suggestedFix ?? "Sesuaikan dengan template Jurnal Permukiman",
         }));
       } catch (err) {
-        parseErrorMessage = err instanceof Error ? err.message : "Berkas OJS tidak dapat dianalisis ulang.";
+        parseErrorMessage =
+          err instanceof Error ? err.message : "Berkas OJS tidak dapat dianalisis ulang.";
       }
     }
 
-    const ojsVersions: VersionHistoryItem[] = [
-      {
-        id: "v-1",
-        versionNumber: ojsItem.versionNumber ?? 1,
-        originalFileName: ojsItem.originalFileName,
-        uploadedAt: ojsItem.updatedAt,
-        parseStatus: parseErrorMessage ? "failed" : "success",
-        uploadedBy: ojsItem.uploadedBy,
-      },
-    ];
-
     return (
-      <div className="flex min-h-screen flex-col puskim-canvas">
-        <AppHeader />
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mb-4">
-            <Link href="/dashboard" className="text-xs font-semibold text-[#A0320A] hover:underline">
-              ← Kembali ke Antrean &amp; Riwayat Naskah
-            </Link>
-          </div>
-          <div className="fresh-card mb-6 rounded-2xl border-t-[3px] border-t-[#C13D0D] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-xl font-bold text-stone-900">{ojsItem.title}</h1>
-                  <StatusBadge status={ojsItem.status} />
-                </div>
-                <p className="mt-1.5 text-sm text-stone-600">
-                  Berkas: <span className="font-mono text-xs">{ojsItem.originalFileName}</span> · Penulis:{" "}
-                  <strong className="font-semibold text-stone-800">{ojsItem.uploadedBy}</strong> · Diperbarui:{" "}
-                  {formatDateID(ojsItem.updatedAt)}
-                </p>
-              </div>
-              {typeof ojsItem.totalRulesChecked === "number" && (
-                <div className="rounded-xl border border-[#F4D4C9] bg-[#FDF4F0] px-4 py-2 text-right">
-                  <p className="text-xs font-semibold text-[#A0320A]">Kepatuhan Template</p>
-                  <p className="text-lg font-bold tabular-nums text-stone-900">
-                    {ojsItem.totalRulesPassed}/{ojsItem.totalRulesChecked} aturan
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <FindingsView findings={ojsFindings} parseErrorMessage={parseErrorMessage} />
-            </div>
-            <div className="space-y-6">
-              <VersionHistoryList versions={ojsVersions} currentVersionId="v-1" />
-            </div>
-          </div>
-        </main>
-      </div>
+      <ManuscriptDetailShell
+        title={ojsItem.title}
+        fileName={ojsItem.originalFileName}
+        versionNumber={ojsItem.versionNumber ?? 1}
+        uploadedBy={ojsItem.uploadedBy}
+        updatedAt={ojsItem.updatedAt}
+        status={ojsItem.status}
+        totalRulesChecked={ojsItem.totalRulesChecked ?? 25}
+        totalRulesPassed={ojsItem.totalRulesPassed ?? 0}
+        errorFindings={ojsItem.errorFindings ?? 0}
+        warningFindings={ojsItem.warningFindings ?? 0}
+        findings={ojsFindings}
+        versions={[
+          {
+            id: "v-1",
+            versionNumber: ojsItem.versionNumber ?? 1,
+            originalFileName: ojsItem.originalFileName,
+            uploadedAt: ojsItem.updatedAt,
+            parseStatus: parseErrorMessage ? "failed" : "success",
+            uploadedBy: ojsItem.uploadedBy,
+          },
+        ]}
+        parseErrorMessage={parseErrorMessage}
+        sourceLabel="Sinkronisasi OJS Jurnal Permukiman"
+      />
     );
   }
 
@@ -262,7 +459,9 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
       if (run) {
         const { data: findingRows } = await supabase
           .from("findings")
-          .select("id, section, severity, check_type, location, current_value, expected_value, suggested_fix")
+          .select(
+            "id, section, severity, check_type, location, current_value, expected_value, suggested_fix",
+          )
           .eq("screening_run_id", run.id);
 
         findings = (findingRows ?? []).map((f) => ({
@@ -277,8 +476,6 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
         }));
       }
 
-      // Reference verification is stored per version and re-runnable, so the
-      // most recent run is shown and the panel can start another.
       const { data: refRun } = await supabase
         .from("reference_check_runs")
         .select("id, source_set_version, total_references, started_at, completed_at")
@@ -311,7 +508,9 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
     .order("version_number", { ascending: false });
 
   const versions: VersionHistoryItem[] = (versionRows ?? []).map((v) => {
-    const profile = Array.isArray(v.uploaded_by_profile) ? v.uploaded_by_profile[0] : v.uploaded_by_profile;
+    const profile = Array.isArray(v.uploaded_by_profile)
+      ? v.uploaded_by_profile[0]
+      : v.uploaded_by_profile;
     return {
       id: v.id,
       versionNumber: v.version_number,
@@ -325,90 +524,57 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
   const status = manuscript.status as ManuscriptStatus;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <AppHeader />
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        <a href="/dashboard" className="text-sm text-slate-500 transition-colors duration-150 hover:text-slate-700">
-          &larr; Kembali ke Riwayat Naskah
-        </a>
-
-        <div className="mt-3 mb-5 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900">{manuscript.title}</h1>
-            <p className="mt-0.5 text-sm text-slate-500">
-              {manuscript.original_file_name} · versi {manuscript.version_number} · diunggah oleh{" "}
-              {uploadedByProfile?.full_name ?? "—"} · {formatDateID(manuscript.updated_at)}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge status={status} />
-            {manuscript.current_version_id && (
-              <>
-                <a
-                  href={`/api/manuscripts/${manuscript.id}/original`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-12a1.5 1.5 0 0 1-1.5-1.5v-4.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3" />
-                  </svg>
-                  File Asli
-                </a>
-                <a
-                  href={`/api/manuscripts/${manuscript.id}/report`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v13.5m0 0-4.5-4.5M12 16.5l4.5-4.5M4.5 19.5h15" />
-                  </svg>
-                  Ekspor Laporan
-                </a>
-              </>
-            )}
-            <DeleteManuscriptButton manuscriptId={manuscript.id} />
-          </div>
-        </div>
-
-        {status === "processing_failed" ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            <p className="font-medium">Gagal memproses naskah</p>
-            <p className="mt-1">{parseErrorMessage ?? "Dokumen tidak dapat dibaca sistem."}</p>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold tabular-nums text-slate-900">
-                  {manuscript.total_rules_passed}/{manuscript.total_rules_checked}
-                </span>
-                <span className="text-sm text-slate-500">aturan otomatis terpenuhi</span>
-              </div>
-              <div className="mt-2 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out)] ${manuscript.error_findings > 0 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{
-                    transform: `scaleX(${manuscript.total_rules_checked === 0 ? 0 : manuscript.total_rules_passed / manuscript.total_rules_checked})`,
-                  }}
-                />
-              </div>
-            </div>
-
-            <FindingsView findings={findings} />
-
-            <div className="mt-4">
-              <ReferenceVerificationPanel
-                manuscriptId={manuscript.id}
-                initialRun={referenceRun}
-                initialChecks={referenceChecks}
-              />
-            </div>
-          </>
-        )}
-
-        <div className="mt-5 flex flex-col gap-4">
-          <RevisionUploadSection manuscriptId={manuscript.id} />
-          <VersionHistoryList versions={versions} />
-        </div>
-      </main>
-    </div>
+    <ManuscriptDetailShell
+      title={manuscript.title}
+      fileName={manuscript.original_file_name}
+      versionNumber={manuscript.version_number}
+      uploadedBy={uploadedByProfile?.full_name ?? "—"}
+      updatedAt={manuscript.updated_at}
+      status={status}
+      totalRulesChecked={manuscript.total_rules_checked}
+      totalRulesPassed={manuscript.total_rules_passed}
+      errorFindings={manuscript.error_findings}
+      warningFindings={manuscript.warning_findings}
+      findings={findings}
+      versions={versions}
+      parseErrorMessage={parseErrorMessage}
+      manuscriptActions={
+        <>
+          {manuscript.current_version_id && (
+            <>
+              <a
+                href={`/api/manuscripts/${manuscript.id}/original`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#DFD9D2] bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-xs transition-colors hover:bg-[#FAF8F5]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-12a1.5 1.5 0 0 1-1.5-1.5v-4.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3" />
+                </svg>
+                File Asli
+              </a>
+              <a
+                href={`/api/manuscripts/${manuscript.id}/report`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#F4D4C9] bg-[#FDF4F0] px-3 py-1.5 text-xs font-bold text-[#A0320A] shadow-xs transition-colors hover:bg-[#C13D0D] hover:text-white"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v13.5m0 0-4.5-4.5M12 16.5l4.5-4.5M4.5 19.5h15" />
+                </svg>
+                Ekspor Laporan
+              </a>
+            </>
+          )}
+          <DeleteManuscriptButton manuscriptId={manuscript.id} />
+        </>
+      }
+      extraMainContent={
+        status !== "processing_failed" ? (
+          <ReferenceVerificationPanel
+            manuscriptId={manuscript.id}
+            initialRun={referenceRun}
+            initialChecks={referenceChecks}
+          />
+        ) : undefined
+      }
+      extraSidebarContent={<RevisionUploadSection manuscriptId={manuscript.id} />}
+    />
   );
 }
