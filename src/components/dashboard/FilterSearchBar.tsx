@@ -43,7 +43,7 @@ export default function FilterSearchBar({
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Cari judul atau nama file..."
           aria-label="Cari naskah"
-          className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          className="w-full rounded-lg border border-[#DFD9D2] bg-[#FAF8F5] py-2 pl-9 pr-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
         />
       </div>
 
@@ -56,10 +56,10 @@ export default function FilterSearchBar({
               type="button"
               onClick={() => onStatusFilterChange(filter.value)}
               aria-pressed={isActive}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-95 ${
                 isActive
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                  ? "bg-gradient-to-r from-[#D14715] to-[#A0320A] text-white shadow-xs"
+                  : "bg-white text-stone-600 ring-1 ring-inset ring-[#DFD9D2] hover:bg-[#FDF4F0] hover:text-[#A0320A] hover:ring-[#F4D4C9]"
               }`}
             >
               {filter.label}

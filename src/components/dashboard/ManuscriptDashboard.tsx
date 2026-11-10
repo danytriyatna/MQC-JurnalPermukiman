@@ -43,14 +43,16 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
 
       <AnalyticsCharts manuscripts={manuscripts} />
 
-      <FilterSearchBar
-        query={query}
-        onQueryChange={setQuery}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-      />
+      <div className="fresh-card flex flex-col gap-3 rounded-2xl p-4">
+        <FilterSearchBar
+          query={query}
+          onQueryChange={setQuery}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+        />
 
-      <ExportMonthControl />
+        <ExportMonthControl />
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyStateDashboard variant="no-results" onResetFilters={resetFilters} />

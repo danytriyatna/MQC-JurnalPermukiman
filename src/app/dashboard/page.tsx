@@ -73,19 +73,30 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen puskim-canvas">
       <AppHeader />
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <div className="mb-5 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900">Antrean & Riwayat Naskah</h1>
-            <p className="mt-0.5 text-sm text-slate-500">
-              Daftar naskah masuk terpadu dari portal <strong>OJS Jurnal Permukiman</strong> dan riwayat pemeriksaan format mandiri.
-            </p>
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div className="flex items-start gap-3">
+            <span
+              className="mt-1 h-7 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-[#D14715] to-[#8C2806]"
+              aria-hidden="true"
+            />
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-stone-900">
+                Antrean &amp; Riwayat Naskah
+              </h1>
+              <p className="mt-0.5 text-sm text-stone-600">
+                Daftar naskah masuk terpadu dari portal{" "}
+                <strong className="font-semibold text-stone-800">OJS Jurnal Permukiman</strong>{" "}
+                dan riwayat pemeriksaan format mandiri.
+              </p>
+            </div>
           </div>
           {ojsSubmissions.length > 0 && (
-            <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-              🟢 Terhubung ke OJS ({ojsSubmissions.length} Naskah Terintegrasi)
+            <span className="inline-flex items-center gap-2 self-start sm:self-auto rounded-full border border-emerald-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-emerald-800 shadow-xs">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-100" aria-hidden="true" />
+              Terhubung ke OJS ({ojsSubmissions.length} Naskah Terintegrasi)
             </span>
           )}
         </div>

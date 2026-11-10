@@ -70,7 +70,7 @@ export default function AccountMenu({ userName, userEmail }: AccountMenuProps) {
       <button
         type="button"
         onClick={() => (isOpen ? closeMenu() : openMenu())}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 transition-transform duration-150 active:scale-[0.94]"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/20 text-xs font-bold text-white transition-all duration-150 hover:bg-black/30 active:scale-[0.94]"
         aria-label={`Akun: ${userName}`}
         aria-expanded={isOpen}
         title={userName}
@@ -81,17 +81,17 @@ export default function AccountMenu({ userName, userEmail }: AccountMenuProps) {
       {isMounted && (
         <div
           data-closing={!isOpen}
-          className="popover-anim absolute right-0 z-20 mt-2 w-56 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          className="popover-anim absolute right-0 z-30 mt-2 w-56 rounded-xl border border-[#DFD9D2] bg-white py-1.5 shadow-lg"
         >
-          <div className="border-b border-slate-100 px-3 py-2">
-            <p className="truncate text-sm font-medium text-slate-900">{userName}</p>
-            <p className="truncate text-xs text-slate-500">{userEmail}</p>
+          <div className="border-b border-[#EFEAE4] px-3.5 py-2.5">
+            <p className="truncate text-sm font-semibold text-stone-900">{userName}</p>
+            <p className="truncate text-xs text-stone-500">{userEmail}</p>
           </div>
           <button
             type="button"
             onClick={handleSignOut}
             disabled={isSigningOut}
-            className="w-full px-3 py-2 text-left text-sm text-slate-700 transition-colors duration-150 hover:bg-slate-50 disabled:opacity-60"
+            className="w-full px-3.5 py-2 text-left text-sm font-medium text-stone-700 transition-colors duration-150 hover:bg-[#FDF4F0] hover:text-[#A0320A] disabled:opacity-60"
           >
             {isSigningOut ? "Keluar..." : "Keluar"}
           </button>

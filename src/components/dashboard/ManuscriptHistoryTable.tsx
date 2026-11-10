@@ -3,12 +3,12 @@ import { formatDateID, initialsOf } from "@/lib/status";
 import StatusBadge from "./StatusBadge";
 
 const AVATAR_PALETTE = [
-  "bg-indigo-100 text-indigo-700",
+  "bg-[#FDF4F0] text-[#A0320A] ring-1 ring-[#F4D4C9]",
   "bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-700",
+  "bg-amber-100 text-amber-800",
+  "bg-stone-200 text-stone-700",
+  "bg-orange-100 text-orange-800",
   "bg-rose-100 text-rose-700",
-  "bg-sky-100 text-sky-700",
-  "bg-violet-100 text-violet-700",
 ];
 
 function avatarColorFor(name: string): string {
@@ -35,7 +35,7 @@ function ComplianceCell({ manuscript }: { manuscript: Manuscript }) {
         </span>
         <span className="text-xs text-slate-500">aturan terpenuhi</span>
       </div>
-      <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-1.5 w-28 overflow-hidden rounded-full bg-[#EFEAE4]">
         <div
           className={`h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out)] ${
             errorFindings > 0 ? "bg-amber-500" : "bg-emerald-500"
@@ -61,71 +61,72 @@ function ComplianceCell({ manuscript }: { manuscript: Manuscript }) {
 
 export default function ManuscriptHistoryTable({ manuscripts }: { manuscripts: Manuscript[] }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="fresh-card overflow-hidden rounded-2xl border-t-[3px] border-t-[#C13D0D]">
       <div className="overflow-x-auto">
-        <table className="min-w-full">
+        <table className="w-full table-auto">
           <thead>
-            <tr className="border-b border-slate-100">
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <tr className="border-b border-[#EFEAE4] bg-[#FAF8F5]/80">
+              <th scope="col" className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-stone-500">
                 Naskah
               </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th scope="col" className="px-3.5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-stone-500">
                 Status
               </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th scope="col" className="px-3.5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-stone-500">
                 Kepatuhan
               </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th scope="col" className="px-3.5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-stone-500">
                 Diunggah oleh
               </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th scope="col" className="px-3.5 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-stone-500">
                 Diperbarui
               </th>
-              <th scope="col" className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <th scope="col" className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-stone-500">
                 <span className="sr-only">Aksi</span>
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[#EFEAE4]">
             {manuscripts.map((manuscript) => (
-              <tr key={manuscript.id} className="transition-colors duration-150 hover:bg-slate-50">
-                <td className="max-w-xs px-5 py-4">
+              <tr key={manuscript.id} className="group transition-colors duration-150 hover:bg-[#FDF9F6]">
+                <td className="max-w-[260px] xl:max-w-[300px] px-4 py-3.5">
                   <a
                     href={`/manuscripts/${manuscript.id}`}
-                    className="block truncate text-sm font-medium text-slate-900 transition-colors duration-150 hover:text-slate-700 hover:underline"
+                    className="block truncate text-sm font-semibold text-stone-900 transition-colors duration-150 group-hover:text-[#A0320A] hover:underline"
                     title={manuscript.title}
                   >
                     {manuscript.title}
                   </a>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                  <p className="mt-0.5 truncate text-xs text-stone-500">
                     {manuscript.originalFileName} · v{manuscript.versionNumber}
                   </p>
                 </td>
-                <td className="whitespace-nowrap px-5 py-4">
+                <td className="whitespace-nowrap px-3.5 py-3.5">
                   <StatusBadge status={manuscript.status} />
                 </td>
-                <td className="whitespace-nowrap px-5 py-4">
+                <td className="whitespace-nowrap px-3.5 py-3.5">
                   <ComplianceCell manuscript={manuscript} />
                 </td>
-                <td className="whitespace-nowrap px-5 py-4">
+                <td className="whitespace-nowrap px-3.5 py-3.5">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ${avatarColorFor(manuscript.uploadedBy)}`}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${avatarColorFor(manuscript.uploadedBy)}`}
                     >
                       {initialsOf(manuscript.uploadedBy)}
                     </span>
-                    <span className="text-sm text-slate-700">{manuscript.uploadedBy}</span>
+                    <span className="text-sm font-medium text-stone-700">{manuscript.uploadedBy}</span>
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-500">
+                <td className="whitespace-nowrap px-3.5 py-3.5 text-xs sm:text-sm text-stone-500">
                   {formatDateID(manuscript.updatedAt)}
                 </td>
-                <td className="whitespace-nowrap px-5 py-4 text-right">
+                <td className="whitespace-nowrap px-4 py-3.5 text-right">
                   <a
                     href={`/manuscripts/${manuscript.id}`}
-                    className="text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900"
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#F4D4C9] bg-[#FDF4F0] px-2.5 py-1 text-xs font-bold text-[#A0320A] transition-colors duration-150 hover:border-[#C13D0D] hover:bg-[#C13D0D] hover:text-white"
                   >
                     Lihat detail
+                    <span aria-hidden="true">→</span>
                   </a>
                 </td>
               </tr>

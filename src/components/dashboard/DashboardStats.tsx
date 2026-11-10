@@ -46,38 +46,41 @@ export default function DashboardStats({ manuscripts }: { manuscripts: Manuscrip
       label: "Total Naskah",
       value: manuscripts.length,
       Icon: DocumentIcon,
-      iconBg: "bg-indigo-50",
-      iconColor: "text-indigo-600",
+      iconBg: "bg-[#FDF4F0] ring-1 ring-[#F4D4C9]",
+      iconColor: "text-[#C13D0D]",
+      topBorder: "border-t-[3px] border-t-[#C13D0D]",
     },
     {
       label: "Lolos",
       value: countBy(manuscripts, "passed"),
       Icon: CheckBadgeIcon,
-      iconBg: "bg-emerald-50",
+      iconBg: "bg-emerald-50 ring-1 ring-emerald-200/80",
       iconColor: "text-emerald-600",
+      topBorder: "border-t-[3px] border-t-emerald-500",
     },
     {
       label: "Perlu Revisi",
       value: countBy(manuscripts, "needs_revision"),
       Icon: AlertIcon,
-      iconBg: "bg-amber-50",
+      iconBg: "bg-amber-50 ring-1 ring-amber-200/80",
       iconColor: "text-amber-600",
+      topBorder: "border-t-[3px] border-t-amber-500",
     },
   ];
 
   return (
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      {stats.map(({ label, value, Icon, iconBg, iconColor }) => (
+    <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {stats.map(({ label, value, Icon, iconBg, iconColor, topBorder }) => (
         <div
           key={label}
-          className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-150 hover:shadow-md"
+          className={`fresh-card ${topBorder} flex items-center gap-3.5 rounded-2xl p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md`}
         >
           <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
             <Icon className={`h-5 w-5 ${iconColor}`} />
           </div>
           <div className="min-w-0">
-            <dd className="text-2xl font-semibold tabular-nums text-slate-900">{value}</dd>
-            <dt className="truncate text-xs font-medium text-slate-500">{label}</dt>
+            <dd className="text-2xl font-bold tabular-nums text-stone-900">{value}</dd>
+            <dt className="truncate text-xs font-semibold text-stone-500">{label}</dt>
           </div>
         </div>
       ))}

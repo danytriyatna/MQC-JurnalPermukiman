@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F2EFE9;
+  --foreground: #1C1917;
+  --puskim-brick: #C13D0D;
+  --puskim-brick-dark: #A0320A;
+  --puskim-brick-soft: #FDF4F0;
+  --puskim-brick-border: #F4D4C9;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
@@ -10,15 +14,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-plus-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
 }
 
 html,
@@ -29,7 +26,21 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .puskim-canvas {
+    background-color: #F2EFE9;
+    background-image: radial-gradient(#DDD6CC 0.9px, transparent 0.9px);
+    background-size: 18px 18px;
+  }
+
+  .fresh-card {
+    background: #FFFFFF;
+    border: 1px solid #DFD9D2;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 18px rgba(193, 61, 13, 0.045);
+  }
 }
 
 /* Origin-aware popover/dropdown entrance + exit. Enter is handled by
