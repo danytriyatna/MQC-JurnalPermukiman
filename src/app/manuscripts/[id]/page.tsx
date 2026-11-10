@@ -8,6 +8,7 @@ import type { FindingSection } from "@/lib/docx/types";
 import VersionHistoryList, { VersionHistoryItem } from "@/components/manuscripts/VersionHistoryList";
 import RevisionUploadSection from "@/components/manuscripts/RevisionUploadSection";
 import DeleteManuscriptButton from "@/components/manuscripts/DeleteManuscriptButton";
+import ManuscriptDetailTabs from "@/components/manuscripts/ManuscriptDetailTabs";
 import ReferenceVerificationPanel, {
   ReferenceCheckRowData,
   ReferenceRunData,
@@ -71,6 +72,7 @@ interface DetailLayoutProps {
   parseErrorMessage?: string | null;
   sourceLabel?: string;
   manuscriptActions?: React.ReactNode;
+  referencesCount?: number;
   extraMainContent?: React.ReactNode;
   extraSidebarContent?: React.ReactNode;
 }
@@ -149,6 +151,7 @@ function ManuscriptDetailShell({
   parseErrorMessage,
   sourceLabel,
   manuscriptActions,
+  referencesCount = 0,
   extraMainContent,
   extraSidebarContent,
 }: DetailLayoutProps) {
@@ -228,16 +231,25 @@ function ManuscriptDetailShell({
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-          <div className="space-y-5 lg:col-span-8">
-            {status === "processing_failed" || parseErrorMessage ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
-                <p className="font-semibold">Gagal memproses naskah</p>
-                <p className="mt-1">{parseErrorMessage ?? "Dokumen tidak dapat dibaca sistem."}</p>
-              </div>
-            ) : (
-              <FindingsView findings={findings} />
-            )}
-            {extraMainContent}
+          <div className="lg:col-span-8">
+            <ManuscriptDetailTabs
+              findingsCount={findings.length}
+              referencesCount={referencesCount}
+              hasReferencesPanel={Boolean(extraMainContent)}
+              findingsContent={
+                status === "processing_failed" || parseErrorMessage ? (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+                    <p className="font-semibold">Gagal memproses naskah</p>
+                    <p className="mt-1">
+                      {parseErrorMessage ?? "Dokumen tidak dapat dibaca sistem."}
+                    </p>
+                  </div>
+                ) : (
+                  <FindingsView findings={findings} />
+                )
+              }
+              referencesContent={extraMainContent}
+            />
           </div>
 
           <div className="space-y-5 lg:col-span-4">
@@ -335,6 +347,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
     const demoFile = isPassed
       ? "Kajian_Kuat_Lentur_Balok_2026.docx"
       : "Pola_Sebaran_Permukiman_Pesisir.docx";
+    const demoRefData = await readOjsReferenceRun(id);
 
     return (
       <ManuscriptDetailShell
@@ -365,6 +378,14 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
         ]}
         sourceLabel="Pemeriksaan Format Mandiri"
         manuscriptActions={<ReportDownloadButtons manuscriptId={id} hasOriginalFile={false} />}
+        referencesCount={demoRefData.checks.length}
+        extraMainContent={
+          <ReferenceVerificationPanel
+            manuscriptId={id}
+            initialRun={demoRefData.run}
+            initialChecks={demoRefData.checks}
+          />
+        }
         extraSidebarContent={<RevisionUploadSection manuscriptId={id} />}
       />
     );
@@ -429,6 +450,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
         manuscriptActions={
           <ReportDownloadButtons manuscriptId={id} hasOriginalFile={Boolean(ojsItem.filePath)} />
         }
+        referencesCount={ojsRefData.checks.length}
         extraMainContent={
           ojsItem.filePath ? (
             <ReferenceVerificationPanel
@@ -566,6 +588,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
       findings={findings}
       versions={versions}
       parseErrorMessage={parseErrorMessage}
+      referencesCount={referenceChecks.length}
       manuscriptActions={
         <>
           {manuscript.current_version_id && (

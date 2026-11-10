@@ -150,7 +150,10 @@ async function requireVersion(supabase: Supabase, manuscriptId: string) {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  if (id.startsWith("ojs-")) {
+  if (id.startsWith("ojs-") || (process.env.NEXT_PUBLIC_DEV_MODE === "true" && id.startsWith("demo-"))) {
+    if (id.startsWith("demo-")) {
+      return NextResponse.json(await readOjsReferenceRun(id));
+    }
     const ojsItem = await findOjsSubmission(id);
     if (!ojsItem) {
       return NextResponse.json({ error: "Naskah OJS tidak ditemukan." }, { status: 404 });
@@ -197,27 +200,69 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  if (id.startsWith("ojs-")) {
-    const ojsItem = await findOjsSubmission(id);
-    if (!ojsItem?.filePath) {
-      return NextResponse.json(
-        { error: "Berkas .docx naskah OJS tidak tersedia untuk verifikasi referensi." },
-        { status: 404 },
-      );
-    }
-
+  if (id.startsWith("ojs-") || (process.env.NEXT_PUBLIC_DEV_MODE === "true" && id.startsWith("demo-"))) {
     let entries: ReferenceEntry[];
-    try {
-      const buf = await fs.readFile(ojsItem.filePath);
-      const doc = await parseDocx(buf);
-      entries = extractReferences(doc);
-    } catch (err) {
-      return NextResponse.json(
+
+    if (id.startsWith("demo-")) {
+      entries = [
         {
-          error: err instanceof DocxParseError ? err.message : "Gagal membaca isi dokumen OJS.",
+          entryIndex: 1,
+          rawText:
+            "Rahayu, S., & Setiawan, B. (2024). Mechanical behavior of reinforced concrete beams with recycled coarse aggregate. Jurnal Permukiman, 19(1), 12–24. https://doi.org/10.31815/jp.2024.19.1.12",
+          kind: "journal",
+          doi: "10.31815/jp.2024.19.1.12",
+          url: "https://doi.org/10.31815/jp.2024.19.1.12",
+          isbn: null,
+          authorSurnames: ["Rahayu", "Setiawan"],
+          year: "2024",
+          title: "Mechanical behavior of reinforced concrete beams with recycled coarse aggregate",
         },
-        { status: 400 },
-      );
+        {
+          entryIndex: 2,
+          rawText:
+            "SNI 2847:2019. Persyaratan Beton Struktural untuk Bangunan Gedung dan Penjelasan. Badan Standardisasi Nasional.",
+          kind: "regulation",
+          doi: null,
+          url: null,
+          isbn: null,
+          authorSurnames: [],
+          year: "2019",
+          title: "Persyaratan Beton Struktural untuk Bangunan Gedung dan Penjelasan",
+        },
+        {
+          entryIndex: 3,
+          rawText:
+            "Zulkifli, N. H. M. (2023). Flexural performance of RCA structural beam elements. Prosiding Konferensi Teknik Sipil Nasional.",
+          kind: "journal",
+          doi: null,
+          url: null,
+          isbn: null,
+          authorSurnames: ["Zulkifli"],
+          year: "2023",
+          title: "Flexural performance of RCA structural beam elements",
+        },
+      ];
+    } else {
+      const ojsItem = await findOjsSubmission(id);
+      if (!ojsItem?.filePath) {
+        return NextResponse.json(
+          { error: "Berkas .docx naskah OJS tidak tersedia untuk verifikasi referensi." },
+          { status: 404 },
+        );
+      }
+
+      try {
+        const buf = await fs.readFile(ojsItem.filePath);
+        const doc = await parseDocx(buf);
+        entries = extractReferences(doc);
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error: err instanceof DocxParseError ? err.message : "Gagal membaca isi dokumen OJS.",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     if (entries.length === 0) {
@@ -349,7 +394,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  if (id.startsWith("ojs-")) {
+  if (id.startsWith("ojs-") || (process.env.NEXT_PUBLIC_DEV_MODE === "true" && id.startsWith("demo-"))) {
     const stored = await readOjsReferenceRun(id);
     if (!stored.run) {
       return NextResponse.json(
