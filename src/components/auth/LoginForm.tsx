@@ -46,7 +46,7 @@ export default function LoginForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-full bg-orange-50 px-5 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow duration-150 focus:outline-none focus:ring-2 focus:ring-orange-400"
+          className="w-full rounded-xl border border-[#DFD9D2] bg-[#FAF8F5] px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
           placeholder="Email"
         />
       </div>
@@ -63,7 +63,7 @@ export default function LoginForm() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-full bg-orange-50 px-5 py-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow duration-150 focus:outline-none focus:ring-2 focus:ring-orange-400"
+          className="w-full rounded-xl border border-[#DFD9D2] bg-[#FAF8F5] px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
           placeholder="Kata Sandi"
         />
       </div>
@@ -77,12 +77,12 @@ export default function LoginForm() {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-2 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+        className="mt-2 rounded-xl bg-gradient-to-r from-[#D14715] to-[#A0320A] px-4 py-3 text-sm font-bold text-white shadow-sm transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
       >
         {isSubmitting ? "Masuk..." : "Masuk"}
       </button>
 
-      <p className="mt-1 text-center text-xs text-slate-400">
+      <p className="mt-1 text-center text-xs text-stone-400">
         Lupa kata sandi? Hubungi admin sekretariat.
       </p>
     </form>

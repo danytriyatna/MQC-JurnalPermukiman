@@ -137,8 +137,10 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-16 text-center transition-colors ${
-          isDragging ? "border-slate-500 bg-slate-100" : "border-slate-300 bg-white hover:bg-slate-50"
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors duration-150 ${
+          isDragging
+            ? "border-[#C13D0D] bg-[#FDF4F0]"
+            : "border-[#DFD9D2] bg-[#FAF8F5]/60 hover:border-[#C13D0D]/60 hover:bg-[#FDF4F0]/50"
         } ${isUploading ? "pointer-events-none opacity-70" : ""}`}
       >
         <input
@@ -155,7 +157,7 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
         {isUploading ? (
           <>
             <svg
-              className="h-8 w-8 animate-spin text-slate-400"
+              className="h-8 w-8 animate-spin text-[#C13D0D]"
               fill="none"
               viewBox="0 0 24 24"
               aria-hidden="true"
@@ -163,10 +165,10 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
             </svg>
-            <p className="mt-3 text-sm font-medium text-slate-900">
+            <p className="mt-3 text-sm font-semibold text-stone-900">
               {phase === "uploading" ? "Mengunggah" : "Memeriksa"} {fileName}…
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-stone-500">
               {phase === "uploading"
                 ? "Mengirim file ke penyimpanan, mohon tunggu."
                 : "Memeriksa kesesuaian naskah dengan gaya selingkung, mohon tunggu."}
@@ -174,13 +176,13 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
           </>
         ) : (
           <>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-              <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FDF4F0] ring-1 ring-[#F4D4C9]">
+              <svg className="h-6 w-6 text-[#C13D0D]" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
               </svg>
             </div>
-            <p className="mt-3 text-sm font-medium text-slate-900">Tarik file .docx ke sini, atau klik untuk memilih</p>
-            <p className="mt-1 text-xs text-slate-500">Maksimum 50MB, format Word (.docx) saja</p>
+            <p className="mt-3 text-sm font-semibold text-stone-900">Tarik file .docx ke sini, atau klik untuk memilih</p>
+            <p className="mt-1 text-xs text-stone-500">Maksimum 50MB, format Microsoft Word (.docx) saja</p>
           </>
         )}
       </div>
