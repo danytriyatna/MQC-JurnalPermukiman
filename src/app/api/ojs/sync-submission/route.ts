@@ -31,7 +31,7 @@ async function saveSubmission(item: any): Promise<void> {
       (m: any) => m.ojs_submission_id === item.ojs_submission_id || m.id === item.id,
     );
     if (existingIndex >= 0) {
-      current[existingIndex] = { ...current[existingIndex], ...item, updatedAt: new Date().toISOString() };
+      current[existingIndex] = { ...current[existingIndex], ...item };
     } else {
       current.unshift(item);
     }
@@ -149,6 +149,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const nowIso = new Date().toISOString();
+    const createdAt = payload.submitted_at || nowIso;
+    const updatedAt = payload.updated_at || nowIso;
+
     const manuscriptRecord = {
       id: `ojs-${ojsSubmissionId}`,
       ojs_submission_id: Number(ojsSubmissionId) || ojsSubmissionId,
@@ -164,8 +168,8 @@ export async function POST(request: NextRequest) {
       score: screeningResult.score,
       filePath: filePath || null,
       source: "OJS_SYNC",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt,
+      updatedAt,
     };
 
     // Simpan ke antrean lokal MQC

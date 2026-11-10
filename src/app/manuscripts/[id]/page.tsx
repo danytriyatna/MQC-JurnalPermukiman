@@ -1,4 +1,8 @@
+import fs from "fs/promises";
+import path from "path";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { screenManuscript } from "@/lib/docx/screenManuscript";
 import AppHeader from "@/components/layout/AppHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import FindingsView, { FindingRowData } from "@/components/findings/FindingsView";
@@ -103,6 +107,110 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
             </div>
             <div className="space-y-6">
               <VersionHistoryList versions={demoVersionRows} currentVersionId="v-1" />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (id.startsWith("ojs-")) {
+    let ojsItem: {
+      id: string;
+      title: string;
+      originalFileName: string;
+      uploadedBy: string;
+      status: ManuscriptStatus;
+      versionNumber?: number;
+      totalRulesChecked?: number;
+      totalRulesPassed?: number;
+      filePath?: string | null;
+      updatedAt: string;
+    } | null = null;
+
+    try {
+      const storePath = path.join(process.cwd(), "data", "ojs_synced_submissions.json");
+      const raw = await fs.readFile(storePath, "utf-8");
+      const list = JSON.parse(raw) as typeof ojsItem[];
+      ojsItem = list.find((m) => m?.id === id) ?? null;
+    } catch {
+      ojsItem = null;
+    }
+
+    if (!ojsItem) {
+      notFound();
+    }
+
+    let ojsFindings: FindingRowData[] = [];
+    let parseErrorMessage: string | null = null;
+    if (ojsItem.filePath) {
+      try {
+        const buffer = await fs.readFile(ojsItem.filePath);
+        const screening = await screenManuscript(buffer);
+        ojsFindings = screening.findings.map((f, idx) => ({
+          id: `ojs-f-${idx}`,
+          section: f.section,
+          severity: f.severity,
+          checkType: f.checkType,
+          location: f.location ?? "Dokumen Utama",
+          currentValue: f.currentValue ?? "-",
+          expectedValue: f.expectedValue ?? "-",
+          suggestedFix: f.suggestedFix ?? "Sesuaikan dengan template Jurnal Permukiman",
+        }));
+      } catch (err) {
+        parseErrorMessage = err instanceof Error ? err.message : "Berkas OJS tidak dapat dianalisis ulang.";
+      }
+    }
+
+    const ojsVersions: VersionHistoryItem[] = [
+      {
+        id: "v-1",
+        versionNumber: ojsItem.versionNumber ?? 1,
+        originalFileName: ojsItem.originalFileName,
+        uploadedAt: ojsItem.updatedAt,
+        parseStatus: parseErrorMessage ? "failed" : "success",
+        uploadedBy: ojsItem.uploadedBy,
+      },
+    ];
+
+    return (
+      <div className="flex min-h-screen flex-col puskim-canvas">
+        <AppHeader />
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mb-4">
+            <Link href="/dashboard" className="text-xs font-semibold text-[#A0320A] hover:underline">
+              ← Kembali ke Antrean &amp; Riwayat Naskah
+            </Link>
+          </div>
+          <div className="fresh-card mb-6 rounded-2xl border-t-[3px] border-t-[#C13D0D] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-xl font-bold text-stone-900">{ojsItem.title}</h1>
+                  <StatusBadge status={ojsItem.status} />
+                </div>
+                <p className="mt-1.5 text-sm text-stone-600">
+                  Berkas: <span className="font-mono text-xs">{ojsItem.originalFileName}</span> · Penulis:{" "}
+                  <strong className="font-semibold text-stone-800">{ojsItem.uploadedBy}</strong> · Diperbarui:{" "}
+                  {formatDateID(ojsItem.updatedAt)}
+                </p>
+              </div>
+              {typeof ojsItem.totalRulesChecked === "number" && (
+                <div className="rounded-xl border border-[#F4D4C9] bg-[#FDF4F0] px-4 py-2 text-right">
+                  <p className="text-xs font-semibold text-[#A0320A]">Kepatuhan Template</p>
+                  <p className="text-lg font-bold tabular-nums text-stone-900">
+                    {ojsItem.totalRulesPassed}/{ojsItem.totalRulesChecked} aturan
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <FindingsView findings={ojsFindings} parseErrorMessage={parseErrorMessage} />
+            </div>
+            <div className="space-y-6">
+              <VersionHistoryList versions={ojsVersions} currentVersionId="v-1" />
             </div>
           </div>
         </main>

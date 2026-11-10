@@ -92,7 +92,7 @@ function ComplianceByUploaderChart({ manuscripts }: { manuscripts: Manuscript[] 
   }
 
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="flex max-h-[168px] flex-col gap-3 overflow-y-auto pr-2">
       {rows.map((row) => (
         <li key={row.name}>
           <div className="mb-1 flex items-center justify-between text-sm">

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import ManuscriptDashboard from "@/components/dashboard/ManuscriptDashboard";
 import { createClient } from "@/lib/supabase/server";
@@ -73,9 +74,9 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen puskim-canvas">
+    <div className="flex min-h-screen flex-col puskim-canvas">
       <AppHeader />
-      <main className="mx-auto w-full max-w-[1760px] px-4 py-5 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-[1760px] flex-1 px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
           <div className="flex items-start gap-3">
             <span
@@ -108,6 +109,29 @@ export default async function DashboardPage() {
           <ManuscriptDashboard manuscripts={manuscripts} />
         )}
       </main>
+      <footer className="mt-auto border-t border-[#DFD9D2] bg-white/80 backdrop-blur-xs">
+        <div className="mx-auto flex w-full max-w-[1760px] flex-col items-start justify-between gap-2 px-4 py-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-[#C13D0D]" aria-hidden="true" />
+            <span>
+              <strong className="font-semibold text-stone-700">MQC Assistant</strong> · Jurnal Permukiman — Direktorat Bina Teknik Permukiman dan Perumahan, Kementerian PU
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <a
+              href="http://localhost/jurnalpermukiman/index.php/JP"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#A0320A] transition-colors hover:underline"
+            >
+              Portal OJS Jurnal Permukiman ↗
+            </a>
+            <Link href="/manuscripts/upload" className="font-medium text-stone-600 transition-colors hover:text-[#A0320A]">
+              Unggah Naskah
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

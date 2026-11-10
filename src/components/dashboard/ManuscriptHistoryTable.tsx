@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Manuscript } from "@/lib/types";
 import { formatDateID, initialsOf } from "@/lib/status";
 import StatusBadge from "./StatusBadge";
@@ -133,6 +134,17 @@ export default function ManuscriptHistoryTable({ manuscripts }: { manuscripts: M
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#EFEAE4] bg-[#FAF8F5]/80 px-4 py-2.5 text-xs text-stone-500">
+        <span>
+          Menampilkan <strong className="font-semibold text-stone-700">{manuscripts.length}</strong> naskah dari antrean terpadu OJS &amp; mandiri
+        </span>
+        <Link
+          href="/manuscripts/upload"
+          className="font-semibold text-[#A0320A] transition-colors hover:text-[#C13D0D] hover:underline"
+        >
+          + Periksa naskah baru
+        </Link>
       </div>
     </div>
   );
