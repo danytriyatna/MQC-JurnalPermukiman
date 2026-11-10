@@ -16,10 +16,10 @@ export default function ExportMonthControl() {
     : `/api/manuscripts/export?month=${month}`;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFEAE4] pt-3">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <label htmlFor="export-month" className="text-xs font-semibold text-stone-600">
-          Unduh daftar naskah
+    <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-[#EFEAE4] pt-3 xl:justify-end xl:border-t-0 xl:border-l xl:border-[#EFEAE4] xl:pl-4 xl:pt-0 shrink-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="export-month" className="text-xs font-semibold text-stone-500">
+          Periode
         </label>
         <input
           id="export-month"

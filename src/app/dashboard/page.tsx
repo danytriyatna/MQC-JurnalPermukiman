@@ -75,8 +75,8 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen puskim-canvas">
       <AppHeader />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <div className="mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+      <main className="mx-auto w-full max-w-[1760px] px-4 py-5 sm:px-6 lg:px-8">
+        <div className="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
           <div className="flex items-start gap-3">
             <span
               className="mt-1 h-7 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-[#D14715] to-[#8C2806]"

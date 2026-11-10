@@ -38,18 +38,25 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <DashboardStats manuscripts={manuscripts} />
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:items-stretch">
+        <div className="xl:col-span-3">
+          <DashboardStats manuscripts={manuscripts} />
+        </div>
+        <div className="xl:col-span-9">
+          <AnalyticsCharts manuscripts={manuscripts} />
+        </div>
+      </div>
 
-      <AnalyticsCharts manuscripts={manuscripts} />
-
-      <div className="fresh-card flex flex-col gap-3 rounded-2xl p-4">
-        <FilterSearchBar
-          query={query}
-          onQueryChange={setQuery}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-        />
+      <div className="fresh-card flex flex-col gap-3 rounded-2xl p-3.5 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <div className="min-w-0 flex-1">
+          <FilterSearchBar
+            query={query}
+            onQueryChange={setQuery}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+          />
+        </div>
 
         <ExportMonthControl />
       </div>

@@ -3,12 +3,12 @@ import { statusDistribution, manuscriptsPerMonth, complianceByUploader } from "@
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="fresh-card rounded-2xl p-4">
+    <div className="fresh-card flex h-full flex-col rounded-2xl p-4">
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-[#C13D0D]" aria-hidden="true" />
         <h3 className="text-sm font-bold text-stone-900">{title}</h3>
       </div>
-      <div className="mt-4">{children}</div>
+      <div className="mt-4 flex flex-1 flex-col justify-center">{children}</div>
     </div>
   );
 }
@@ -35,25 +35,25 @@ function StatusDonut({ manuscripts }: { manuscripts: Manuscript[] }) {
   ).list;
 
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex items-center gap-4">
       <div
-        className="h-28 w-28 shrink-0 rounded-full"
+        className="h-24 w-24 2xl:h-28 2xl:w-28 shrink-0 rounded-full"
         style={{ background: `conic-gradient(${stops.join(", ")})` }}
         role="img"
         aria-label={slices.map((s) => `${s.label}: ${s.count}`).join(", ")}
       >
         <div className="flex h-full w-full items-center justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white">
-            <span className="text-lg font-semibold tabular-nums text-slate-900">{total}</span>
+          <div className="flex h-14 w-14 2xl:h-16 2xl:w-16 items-center justify-center rounded-full bg-white">
+            <span className="text-lg font-bold tabular-nums text-stone-900">{total}</span>
           </div>
         </div>
       </div>
-      <ul className="flex flex-col gap-1.5">
+      <ul className="flex flex-1 flex-col gap-1.5 min-w-0">
         {slices.map((s) => (
           <li key={s.status} className="flex items-center gap-2 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.hexColor }} aria-hidden="true" />
-            <span className="text-slate-700">{s.label}</span>
-            <span className="ml-auto font-medium tabular-nums text-slate-900">{s.count}</span>
+            <span className="truncate text-stone-700">{s.label}</span>
+            <span className="ml-auto font-semibold tabular-nums text-stone-900">{s.count}</span>
           </li>
         ))}
       </ul>
@@ -119,7 +119,7 @@ function ComplianceByUploaderChart({ manuscripts }: { manuscripts: Manuscript[] 
 
 export default function AnalyticsCharts({ manuscripts }: { manuscripts: Manuscript[] }) {
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+    <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-3">
       <ChartCard title="Distribusi Status Naskah">
         <StatusDonut manuscripts={manuscripts} />
       </ChartCard>

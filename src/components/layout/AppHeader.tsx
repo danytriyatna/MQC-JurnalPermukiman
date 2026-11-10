@@ -23,7 +23,7 @@ export default async function AppHeader() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-[#8C2806]/60 bg-gradient-to-r from-[#B93A0C] via-[#C13D0D] to-[#962D08] shadow-sm">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <Link href="/dashboard" className="flex items-center gap-3 rounded-lg transition-opacity duration-150 hover:opacity-90">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
             <Image

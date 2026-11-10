@@ -25,8 +25,8 @@ export default function FilterSearchBar({
   onStatusFilterChange,
 }: FilterSearchBarProps) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="relative w-full sm:max-w-xs">
+    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-3">
+      <div className="relative w-full lg:w-64 xl:w-72 shrink-0">
         <svg
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
           fill="none"

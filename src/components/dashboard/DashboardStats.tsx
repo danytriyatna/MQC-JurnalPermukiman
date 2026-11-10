@@ -41,10 +41,17 @@ function AlertIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export default function DashboardStats({ manuscripts }: { manuscripts: Manuscript[] }) {
+  const total = manuscripts.length;
+  const passedCount = countBy(manuscripts, "passed");
+  const revisionCount = countBy(manuscripts, "needs_revision");
+  const pctOfTotal = (n: number) => (total === 0 ? "0%" : `${Math.round((n / total) * 100)}%`);
+
   const stats = [
     {
       label: "Total Naskah",
-      value: manuscripts.length,
+      value: total,
+      badge: "OJS + Mandiri",
+      badgeClass: "bg-[#FDF4F0] text-[#A0320A] border-[#F4D4C9]",
       Icon: DocumentIcon,
       iconBg: "bg-[#FDF4F0] ring-1 ring-[#F4D4C9]",
       iconColor: "text-[#C13D0D]",
@@ -52,7 +59,9 @@ export default function DashboardStats({ manuscripts }: { manuscripts: Manuscrip
     },
     {
       label: "Lolos",
-      value: countBy(manuscripts, "passed"),
+      value: passedCount,
+      badge: `${pctOfTotal(passedCount)} lulus`,
+      badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
       Icon: CheckBadgeIcon,
       iconBg: "bg-emerald-50 ring-1 ring-emerald-200/80",
       iconColor: "text-emerald-600",
@@ -60,7 +69,9 @@ export default function DashboardStats({ manuscripts }: { manuscripts: Manuscrip
     },
     {
       label: "Perlu Revisi",
-      value: countBy(manuscripts, "needs_revision"),
+      value: revisionCount,
+      badge: `${pctOfTotal(revisionCount)} revisi`,
+      badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
       Icon: AlertIcon,
       iconBg: "bg-amber-50 ring-1 ring-amber-200/80",
       iconColor: "text-amber-600",
@@ -69,19 +80,24 @@ export default function DashboardStats({ manuscripts }: { manuscripts: Manuscrip
   ];
 
   return (
-    <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      {stats.map(({ label, value, Icon, iconBg, iconColor, topBorder }) => (
+    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1 xl:h-full">
+      {stats.map(({ label, value, badge, badgeClass, Icon, iconBg, iconColor, topBorder }) => (
         <div
           key={label}
-          className={`fresh-card ${topBorder} flex items-center gap-3.5 rounded-2xl p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md`}
+          className={`fresh-card ${topBorder} flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md`}
         >
-          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
-            <Icon className={`h-5 w-5 ${iconColor}`} />
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
+              <Icon className={`h-5 w-5 ${iconColor}`} />
+            </div>
+            <div className="min-w-0">
+              <dd className="text-2xl font-bold leading-none tabular-nums text-stone-900">{value}</dd>
+              <dt className="mt-1 truncate text-xs font-semibold text-stone-500">{label}</dt>
+            </div>
           </div>
-          <div className="min-w-0">
-            <dd className="text-2xl font-bold tabular-nums text-stone-900">{value}</dd>
-            <dt className="truncate text-xs font-semibold text-stone-500">{label}</dt>
-          </div>
+          <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tabular-nums ${badgeClass}`}>
+            {badge}
+          </span>
         </div>
       ))}
     </dl>

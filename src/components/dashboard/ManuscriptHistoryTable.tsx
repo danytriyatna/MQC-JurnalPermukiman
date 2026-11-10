@@ -89,7 +89,7 @@ export default function ManuscriptHistoryTable({ manuscripts }: { manuscripts: M
           <tbody className="divide-y divide-[#EFEAE4]">
             {manuscripts.map((manuscript) => (
               <tr key={manuscript.id} className="group transition-colors duration-150 hover:bg-[#FDF9F6]">
-                <td className="max-w-[260px] xl:max-w-[300px] px-4 py-3.5">
+                <td className="max-w-[260px] xl:max-w-[340px] 2xl:max-w-[560px] px-4 py-3.5">
                   <a
                     href={`/manuscripts/${manuscript.id}`}
                     className="block truncate text-sm font-semibold text-stone-900 transition-colors duration-150 group-hover:text-[#A0320A] hover:underline"
