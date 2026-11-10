@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 export default function DeleteManuscriptButton({ manuscriptId }: { manuscriptId: string }) {
   const router = useRouter();
@@ -27,16 +28,43 @@ export default function DeleteManuscriptButton({ manuscriptId }: { manuscriptId:
   };
 
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={handleDelete}
       disabled={isDeleting}
-      className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium text-rose-600 shadow-sm transition-[background-color,transform] duration-150 hover:bg-rose-50 active:scale-[0.97] disabled:opacity-60"
+      aria-busy={isDeleting}
+      className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
     >
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9M19.5 5.5h-15m2 0-.001-1.6a2 2 0 0 1 2-2h3.002a2 2 0 0 1 2 2V5.5m-8 0v13a2 2 0 0 0 2 2h6.002a2 2 0 0 0 2-2v-13" />
-      </svg>
-      {isDeleting ? "Menghapus…" : "Hapus"}
-    </button>
+      {isDeleting ? (
+        <svg
+          className="h-4 w-4 animate-spin text-rose-500"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="3"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8v8H4z"
+          />
+        </svg>
+      ) : (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9M19.5 5.5h-15m2 0-.001-1.6a2 2 0 0 1 2-2h3.002a2 2 0 0 1 2 2V5.5m-8 0v13a2 2 0 0 0 2 2h6.002a2 2 0 0 0 2-2v-13" />
+        </svg>
+      )}
+      <span>{isDeleting ? "Menghapus…" : "Hapus"}</span>
+    </Button>
   );
 }

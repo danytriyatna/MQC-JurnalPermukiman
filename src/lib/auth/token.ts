@@ -1,7 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 
 function getSecretKey(): Uint8Array {
-  const secret = process.env.JWT_SECRET || "pupr_default_jwt_secret_token_at_least_32_characters_long";
+  const secret = process.env.JWT_SECRET?.trim();
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "Konfigurasi keamanan tidak lengkap: JWT_SECRET wajib diatur di environment minimal 32 karakter.",
+    );
+  }
   return new TextEncoder().encode(secret);
 }
 

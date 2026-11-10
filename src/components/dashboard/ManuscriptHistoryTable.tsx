@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { Manuscript } from "@/lib/types";
 import { formatDateID, initialsOf } from "@/lib/status";
 import StatusBadge from "./StatusBadge";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 const AVATAR_PALETTE = [
   "bg-indigo-100 text-indigo-700",
@@ -13,16 +15,18 @@ const AVATAR_PALETTE = [
 
 function avatarColorFor(name: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % AVATAR_PALETTE.length;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) % AVATAR_PALETTE.length;
+  }
   return AVATAR_PALETTE[Math.abs(hash)];
 }
 
 function ComplianceCell({ manuscript }: { manuscript: Manuscript }) {
   if (manuscript.status === "processing" || manuscript.status === "pending") {
-    return <span className="text-sm text-slate-400">Menunggu pemeriksaan</span>;
+    return <span className="text-sm text-muted-foreground">Menunggu pemeriksaan</span>;
   }
   if (manuscript.status === "processing_failed") {
-    return <span className="text-sm text-slate-400">Tidak dapat dianalisis</span>;
+    return <span className="text-sm text-muted-foreground">Tidak dapat dianalisis</span>;
   }
 
   const { totalRulesChecked, totalRulesPassed, errorFindings, warningFindings } = manuscript;
@@ -33,7 +37,7 @@ function ComplianceCell({ manuscript }: { manuscript: Manuscript }) {
         <span className="text-sm font-medium tabular-nums text-slate-900">
           {totalRulesPassed}/{totalRulesChecked}
         </span>
-        <span className="text-xs text-slate-500">aturan terpenuhi</span>
+        <span className="text-xs text-muted-foreground">aturan terpenuhi</span>
       </div>
       <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
         <div
@@ -59,80 +63,104 @@ function ComplianceCell({ manuscript }: { manuscript: Manuscript }) {
   );
 }
 
-export default function ManuscriptHistoryTable({ manuscripts }: { manuscripts: Manuscript[] }) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="min-w-full">
-          <thead>
-            <tr className="border-b border-slate-100">
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Naskah
-              </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Status
-              </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Kepatuhan
-              </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Diunggah oleh
-              </th>
-              <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Diperbarui
-              </th>
-              <th scope="col" className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <span className="sr-only">Aksi</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {manuscripts.map((manuscript) => (
-              <tr key={manuscript.id} className="transition-colors duration-150 hover:bg-slate-50">
-                <td className="max-w-xs px-5 py-4">
-                  <a
-                    href={`/manuscripts/${manuscript.id}`}
-                    className="block truncate text-sm font-medium text-slate-900 transition-colors duration-150 hover:text-slate-700 hover:underline"
-                    title={manuscript.title}
-                  >
-                    {manuscript.title}
-                  </a>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">
-                    {manuscript.originalFileName} · v{manuscript.versionNumber}
-                  </p>
-                </td>
-                <td className="whitespace-nowrap px-5 py-4">
-                  <StatusBadge status={manuscript.status} />
-                </td>
-                <td className="whitespace-nowrap px-5 py-4">
-                  <ComplianceCell manuscript={manuscript} />
-                </td>
-                <td className="whitespace-nowrap px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ${avatarColorFor(manuscript.uploadedBy)}`}
-                    >
-                      {initialsOf(manuscript.uploadedBy)}
-                    </span>
-                    <span className="text-sm text-slate-700">{manuscript.uploadedBy}</span>
-                  </div>
-                </td>
-                <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-500">
-                  {formatDateID(manuscript.updatedAt)}
-                </td>
-                <td className="whitespace-nowrap px-5 py-4 text-right">
-                  <a
-                    href={`/manuscripts/${manuscript.id}`}
-                    className="text-sm font-medium text-slate-600 transition-colors duration-150 hover:text-slate-900"
-                  >
-                    Lihat detail
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+const manuscriptColumns: DataTableColumn<Manuscript>[] = [
+  {
+    id: "naskah",
+    header: "Naskah",
+    className: "max-w-xs",
+    headerClassName: "w-[35%]",
+    cell: (manuscript) => (
+      <div>
+        <Link
+          href={`/manuscripts/${manuscript.id}`}
+          className="block truncate text-sm font-medium text-slate-900 transition-colors hover:text-primary hover:underline"
+          title={manuscript.title}
+        >
+          {manuscript.title}
+        </Link>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {manuscript.originalFileName} · v{manuscript.versionNumber}
+        </p>
       </div>
-    </div>
+    ),
+  },
+  {
+    id: "status",
+    header: "Status",
+    className: "whitespace-nowrap",
+    cell: (manuscript) => <StatusBadge status={manuscript.status} />,
+  },
+  {
+    id: "kepatuhan",
+    header: "Kepatuhan",
+    className: "whitespace-nowrap",
+    cell: (manuscript) => <ComplianceCell manuscript={manuscript} />,
+  },
+  {
+    id: "uploader",
+    header: "Diunggah oleh",
+    className: "whitespace-nowrap",
+    cell: (manuscript) => (
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ${avatarColorFor(
+            manuscript.uploadedBy
+          )}`}
+        >
+          {initialsOf(manuscript.uploadedBy)}
+        </span>
+        <span className="text-sm text-slate-700">{manuscript.uploadedBy}</span>
+      </div>
+    ),
+  },
+  {
+    id: "diperbarui",
+    header: "Diperbarui",
+    className: "whitespace-nowrap text-sm text-muted-foreground",
+    cell: (manuscript) => formatDateID(manuscript.updatedAt),
+  },
+  {
+    id: "aksi",
+    header: <span className="sr-only">Aksi</span>,
+    className: "whitespace-nowrap text-right",
+    headerClassName: "text-right",
+    cell: (manuscript) => (
+      <Link
+        href={`/manuscripts/${manuscript.id}`}
+        className="text-xs font-semibold text-primary transition-colors hover:text-primary/80 hover:underline"
+      >
+        Lihat detail
+      </Link>
+    ),
+  },
+];
+
+interface ManuscriptHistoryTableProps {
+  manuscripts: Manuscript[];
+  enableSearch?: boolean;
+  enablePagination?: boolean;
+  defaultPageSize?: number;
+  isLoading?: boolean;
+}
+
+export default function ManuscriptHistoryTable({
+  manuscripts,
+  enableSearch = false,
+  enablePagination = true,
+  defaultPageSize = 10,
+  isLoading = false,
+}: ManuscriptHistoryTableProps) {
+  return (
+    <DataTable<Manuscript>
+      columns={manuscriptColumns}
+      data={manuscripts}
+      searchKeys={["title", "originalFileName", "uploadedBy"]}
+      searchPlaceholder="Cari judul, file, atau pengunggah..."
+      enableSearch={enableSearch}
+      enablePagination={enablePagination}
+      defaultPageSize={defaultPageSize}
+      isLoading={isLoading}
+      emptyMessage="Tidak ada naskah yang cocok dengan filter atau pencarian."
+    />
   );
 }

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { ReferenceKind, ReferenceVerdict } from "@/lib/references/types";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * Reference verification panel.
@@ -48,54 +51,54 @@ interface VerdictStyle {
   label: string;
   /** Grouping headline — what a reviewer should do about this group. */
   group: string;
-  badge: string;
+  variant: "destructive" | "warning" | "secondary" | "success" | "outline";
 }
 
 const VERDICT_STYLES: Record<Verdict, VerdictStyle> = {
   doi_invalid: {
     label: "Indikasi fiktif",
     group: "Indikasi kuat tidak nyata",
-    badge: "bg-rose-50 text-rose-700 ring-rose-600/20",
+    variant: "destructive",
   },
   metadata_mismatch: {
     label: "Data melenceng",
     group: "Ada, tetapi datanya tidak sesuai",
-    badge: "bg-amber-50 text-amber-700 ring-amber-600/20",
+    variant: "warning",
   },
   regulation_inconsistent: {
     label: "Kutipan tidak konsisten",
     group: "Ada, tetapi datanya tidak sesuai",
-    badge: "bg-amber-50 text-amber-700 ring-amber-600/20",
+    variant: "warning",
   },
   url_unreachable: {
     label: "Tautan mati",
     group: "Perlu diperiksa manual",
-    badge: "bg-slate-100 text-slate-700 ring-slate-400/20",
+    variant: "secondary",
   },
   not_found: {
     label: "Tidak ditemukan",
     group: "Perlu diperiksa manual",
-    badge: "bg-slate-100 text-slate-700 ring-slate-400/20",
+    variant: "secondary",
   },
   not_verifiable: {
     label: "Di luar jangkauan",
     group: "Perlu diperiksa manual",
-    badge: "bg-slate-100 text-slate-700 ring-slate-400/20",
+    variant: "secondary",
   },
   check_failed: {
     label: "Gagal diperiksa",
     group: "Perlu diperiksa manual",
-    badge: "bg-slate-100 text-slate-700 ring-slate-400/20",
+    variant: "secondary",
   },
   verified: {
     label: "Terkonfirmasi",
     group: "Terkonfirmasi ada",
-    badge: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+    variant: "success",
   },
   pending: {
     label: "Menunggu",
     group: "Belum diperiksa",
-    badge: "bg-slate-100 text-slate-500 ring-slate-400/20",
+    variant: "outline",
   },
 };
 
@@ -137,11 +140,9 @@ function CheckRow({ row }: { row: ReferenceCheckRowData }) {
     <div className="border-b border-slate-100 px-4 py-3 last:border-b-0">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs tabular-nums text-slate-400">#{row.entry_index}</span>
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${style.badge}`}
-        >
+        <Badge variant={style.variant}>
           {style.label}
-        </span>
+        </Badge>
         <span className="text-xs text-slate-500">{KIND_LABELS[row.kind]}</span>
         {row.confidence && (
           <span className="text-xs text-slate-400">{CONFIDENCE_LABELS[row.confidence]}</span>
@@ -300,20 +301,22 @@ export default function ReferenceVerificationPanel({
   const suspicious = checks.filter((c) => c.verdict === "doi_invalid").length;
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+    <Card className="shadow-sm">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-4">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Verifikasi Referensi</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <CardTitle className="text-sm font-semibold text-slate-900">Verifikasi Referensi</CardTitle>
+          <CardDescription className="mt-0.5 text-xs text-slate-500">
             Mencocokkan setiap entri daftar pustaka ke Crossref, OpenAlex, dan OpenLibrary,
             serta memeriksa tautan yang dicantumkan.
-          </p>
+          </CardDescription>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={start}
           disabled={isRunning}
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 shadow-sm"
         >
           {isRunning && (
             <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -322,74 +325,75 @@ export default function ReferenceVerificationPanel({
             </svg>
           )}
           {isRunning ? "Memeriksa…" : run ? "Periksa ulang" : "Mulai verifikasi"}
-        </button>
-      </div>
-
-      {error && (
-        <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-          {error}
-        </div>
-      )}
-
-      {isRunning && total > 0 && (
-        <div className="border-b border-slate-100 px-4 py-2">
-          <p className="text-xs text-slate-500 tabular-nums">
-            {done} dari {total} referensi diperiksa
-          </p>
-          <div className="mt-1.5 h-1 w-full max-w-sm overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full w-full origin-left rounded-full bg-slate-400 transition-transform duration-300"
-              style={{ transform: `scaleX(${total === 0 ? 0 : done / total})` }}
-            />
+        </Button>
+      </CardHeader>
+      <CardContent className="p-0">
+        {error && (
+          <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      {!run && !isRunning && (
-        <p className="px-4 py-4 text-sm text-slate-500">
-          Belum ada verifikasi untuk versi naskah ini. Pemeriksaan memerlukan koneksi internet
-          dan memanggil basis data pihak ketiga, sehingga dijalankan terpisah dari penyaringan
-          gaya selingkung dan tidak memengaruhi status naskah.
-        </p>
-      )}
-
-      {run && checks.length > 0 && (
-        <>
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-            <p className="text-xs text-slate-600">
-              {suspicious > 0 ? (
-                <>
-                  <strong className="font-semibold text-rose-700">
-                    {suspicious} referensi berindikasi kuat tidak nyata
-                  </strong>{" "}
-                  (DOI tidak terdaftar). Konfirmasi langsung ke penulis sebelum mengambil
-                  kesimpulan.
-                </>
-              ) : (
-                <>Tidak ada referensi dengan DOI yang tidak terdaftar.</>
-              )}
+        {isRunning && total > 0 && (
+          <div className="border-b border-slate-100 px-4 py-2">
+            <p className="text-xs text-slate-500 tabular-nums">
+              {done} dari {total} referensi diperiksa
             </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Entri bertanda <em>Tidak ditemukan</em> atau <em>Di luar jangkauan</em> belum tentu
-              fiktif — jurnal lokal Indonesia, terbitan kementerian, dan peraturan umumnya tidak
-              terindeks di basis data yang dipakai di sini.
-            </p>
-          </div>
-
-          {grouped.map(({ group, rows }) => (
-            <div key={group}>
-              <h3 className="bg-white px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                {group} · {rows.length}
-              </h3>
-              <div>
-                {rows.map((row) => (
-                  <CheckRow key={row.id} row={row} />
-                ))}
-              </div>
+            <div className="mt-1.5 h-1 w-full max-w-sm overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full w-full origin-left rounded-full bg-slate-400 transition-transform duration-300"
+                style={{ transform: `scaleX(${total === 0 ? 0 : done / total})` }}
+              />
             </div>
-          ))}
-        </>
-      )}
-    </section>
+          </div>
+        )}
+
+        {!run && !isRunning && (
+          <p className="px-4 py-4 text-sm text-slate-500">
+            Belum ada verifikasi untuk versi naskah ini. Pemeriksaan memerlukan koneksi internet
+            dan memanggil basis data pihak ketiga, sehingga dijalankan terpisah dari penyaringan
+            gaya selingkung dan tidak memengaruhi status naskah.
+          </p>
+        )}
+
+        {run && checks.length > 0 && (
+          <>
+            <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+              <p className="text-xs text-slate-600">
+                {suspicious > 0 ? (
+                  <>
+                    <strong className="font-semibold text-rose-700">
+                      {suspicious} referensi berindikasi kuat tidak nyata
+                    </strong>{" "}
+                    (DOI tidak terdaftar). Konfirmasi langsung ke penulis sebelum mengambil
+                    kesimpulan.
+                  </>
+                ) : (
+                  <>Tidak ada referensi dengan DOI yang tidak terdaftar.</>
+                )}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Entri bertanda <em>Tidak ditemukan</em> atau <em>Di luar jangkauan</em> belum tentu
+                fiktif — jurnal lokal Indonesia, terbitan kementerian, dan peraturan umumnya tidak
+                terindeks di basis data yang dipakai di sini.
+              </p>
+            </div>
+
+            {grouped.map(({ group, rows }) => (
+              <div key={group}>
+                <h3 className="bg-white px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  {group} · {rows.length}
+                </h3>
+                <div>
+                  {rows.map((row) => (
+                    <CheckRow key={row.id} row={row} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -2,10 +2,9 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { buildManuscriptStoragePath } from "@/lib/upload/storagePath";
 import { validateDocxUpload } from "@/lib/upload/validateFile";
-import { DOCX_CONTENT_TYPE, MANUSCRIPT_BUCKET } from "@/lib/upload/constants";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 type Phase = "idle" | "uploading" | "screening";
 
@@ -36,66 +35,25 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
       setPhase("idle");
     };
 
-    const supabase = createClient();
-    let storagePath: string;
-
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const formData = new FormData();
+      formData.append("file", file);
 
-      if (!user) {
-        fail("Sesi Anda sudah berakhir. Silakan login ulang lalu coba lagi.");
-        return;
-      }
+      setPhase("screening");
 
-      storagePath = buildManuscriptStoragePath(user.id);
-
-      // The .docx goes straight from the browser into Storage rather than
-      // through /api/manuscripts. Posting it to the API would put the whole
-      // file in a serverless function's request body, which Vercel caps at
-      // about 4.5MB — far below the 50MB this form accepts, and rejected at
-      // the edge with a response the browser cannot read as JSON.
-      const { error: uploadError } = await supabase.storage
-        .from(MANUSCRIPT_BUCKET)
-        .upload(storagePath, file, {
-          contentType: DOCX_CONTENT_TYPE,
-          upsert: false,
-        });
-
-      if (uploadError) {
-        fail(`Gagal mengunggah file ke penyimpanan: ${uploadError.message}`);
-        return;
-      }
-    } catch {
-      fail("Gagal mengunggah file. Periksa koneksi internet Anda dan coba lagi.");
-      return;
-    }
-
-    setPhase("screening");
-
-    try {
       const endpoint = manuscriptId
         ? `/api/manuscripts/${manuscriptId}/revisions`
         : "/api/manuscripts";
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storagePath, originalFileName: file.name }),
+        body: formData,
       });
 
-      // An error produced upstream of the route — a gateway, a proxy, a
-      // platform limit — comes back as HTML, not JSON. Parsing it outside the
-      // catch kept those cases indistinguishable from a dropped connection.
       const body = await res.json().catch(() => null);
 
       if (!res.ok) {
         fail(body?.error ?? `Gagal memproses naskah (HTTP ${res.status}). Coba lagi.`);
-        // Safe only on an explicit rejection: every path that answers with an
-        // error leaves no manuscript_versions row pointing at this object. A
-        // lost response is not the same thing — see the catch below.
-        void supabase.storage.from(MANUSCRIPT_BUCKET).remove([storagePath]);
         return;
       }
 
@@ -107,10 +65,6 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
         router.push(`/manuscripts/${body.manuscriptId}`);
       }
     } catch {
-      // The object is deliberately left in place. Screening may well have
-      // succeeded with only the response lost, in which case a row already
-      // references this key and deleting it would break the original-file
-      // download. An unreferenced object merely wastes storage.
       fail("Gagal terhubung ke server. Periksa koneksi internet Anda dan coba lagi.");
     }
   };
@@ -124,7 +78,7 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
 
   return (
     <div className="flex flex-col gap-3">
-      <div
+      <Card
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -137,58 +91,96 @@ export default function UploadForm({ manuscriptId }: { manuscriptId?: string }) 
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-16 text-center transition-colors ${
-          isDragging ? "border-slate-500 bg-slate-100" : "border-slate-300 bg-white hover:bg-slate-50"
+        className={`cursor-pointer border-2 border-dashed transition-colors shadow-none ${
+          isDragging
+            ? "border-primary bg-primary/5"
+            : "border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50"
         } ${isUploading ? "pointer-events-none opacity-70" : ""}`}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".docx"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void validateAndUpload(file);
-          }}
-        />
+        <CardContent className="flex flex-col items-center justify-center px-6 py-14 text-center">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".docx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void validateAndUpload(file);
+            }}
+          />
 
-        {isUploading ? (
-          <>
-            <svg
-              className="h-8 w-8 animate-spin text-slate-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-            </svg>
-            <p className="mt-3 text-sm font-medium text-slate-900">
-              {phase === "uploading" ? "Mengunggah" : "Memeriksa"} {fileName}…
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              {phase === "uploading"
-                ? "Mengirim file ke penyimpanan, mohon tunggu."
-                : "Memeriksa kesesuaian naskah dengan gaya selingkung, mohon tunggu."}
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-              <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+          {isUploading ? (
+            <>
+              <svg
+                className="h-9 w-9 animate-spin text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                />
               </svg>
-            </div>
-            <p className="mt-3 text-sm font-medium text-slate-900">Tarik file .docx ke sini, atau klik untuk memilih</p>
-            <p className="mt-1 text-xs text-slate-500">Maksimum 50MB, format Word (.docx) saja</p>
-          </>
-        )}
-      </div>
+              <p className="mt-4 text-sm font-semibold text-slate-900">
+                {phase === "uploading" ? "Mengunggah" : "Memeriksa"} {fileName}…
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {phase === "uploading"
+                  ? "Mengirim file ke penyimpanan, mohon tunggu sebentar."
+                  : "Mengevaluasi kesesuaian naskah dengan gaya selingkung Jurnal Permukiman."}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <svg
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.75}
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"
+                  />
+                </svg>
+              </div>
+              <p className="mt-3.5 text-sm font-semibold text-slate-900">
+                Tarik file .docx ke sini, atau klik untuk memilih
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Maksimum 50MB · Dokumen Microsoft Word (.docx)
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4 pointer-events-none rounded-xl text-xs font-semibold"
+              >
+                Pilih Berkas Dokumen
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {error && (
         <div
           role="alert"
-          className="alert-anim rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          className="alert-anim rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700"
         >
           {error}
         </div>

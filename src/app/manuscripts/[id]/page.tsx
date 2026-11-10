@@ -1,10 +1,15 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import FindingsView, { FindingRowData } from "@/components/findings/FindingsView";
 import VersionHistoryList, { VersionHistoryItem } from "@/components/manuscripts/VersionHistoryList";
 import RevisionUploadSection from "@/components/manuscripts/RevisionUploadSection";
 import DeleteManuscriptButton from "@/components/manuscripts/DeleteManuscriptButton";
+import ScreenNowPendingButton from "@/components/manuscripts/ScreenNowPendingButton";
+import DownloadActionButton from "@/components/manuscripts/DownloadActionButton";
 import ReferenceVerificationPanel, {
   ReferenceCheckRowData,
   ReferenceRunData,
@@ -276,9 +281,9 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        <a href="/dashboard" className="text-sm text-slate-500 transition-colors duration-150 hover:text-slate-700">
+        <Link href="/dashboard" className="text-sm text-slate-500 transition-colors duration-150 hover:text-slate-700">
           &larr; Kembali ke Riwayat Naskah
-        </a>
+        </Link>
 
         <div className="mt-3 mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -292,24 +297,20 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
             <StatusBadge status={status} />
             {manuscript.current_version_id && (
               <>
-                <a
+                <DownloadActionButton
                   href={`/api/manuscripts/${manuscript.id}/original${tokenQuery}`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-12a1.5 1.5 0 0 1-1.5-1.5v-4.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3" />
-                  </svg>
-                  File Asli
-                </a>
-                <a
+                  defaultFilename={manuscript.original_file_name || "naskah-asli.docx"}
+                  label="File Asli"
+                  loadingLabel="Mengunduh…"
+                  iconType="original"
+                />
+                <DownloadActionButton
                   href={`/api/manuscripts/${manuscript.id}/report${tokenQuery}`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-[background-color,transform] duration-150 hover:bg-slate-50 active:scale-[0.97]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v13.5m0 0-4.5-4.5M12 16.5l4.5-4.5M4.5 19.5h15" />
-                  </svg>
-                  Ekspor Laporan
-                </a>
+                  defaultFilename={`Laporan - ${manuscript.title || "naskah"}.docx`}
+                  label="Ekspor Laporan"
+                  loadingLabel="Menyiapkan…"
+                  iconType="report"
+                />
               </>
             )}
             <DeleteManuscriptButton manuscriptId={manuscript.id} />
@@ -325,13 +326,13 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
                 <p className="mt-1 text-blue-800">
                   Naskah ini telah berhasil diterima dan saat ini berada di dalam antrean tugas pemeriksaan Tim Redaksi Jurnal Permukiman. Hasil penapisan format dan verifikasi referensi akan ditampilkan di sini setelah redaksi menjalankan pemeriksaan.
                 </p>
-                <div className="mt-3">
-                  <a
-                    href="/dashboard"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
-                  >
-                    Buka Antrean Pemeriksaan di Dashboard &rarr;
-                  </a>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <ScreenNowPendingButton manuscriptId={manuscript.id} />
+                  <Button asChild variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                    <Link href="/dashboard">
+                      Buka Antrean di Dashboard &rarr;
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -343,22 +344,24 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
           </div>
         ) : (
           <>
-            <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold tabular-nums text-slate-900">
-                  {manuscript.total_rules_passed}/{manuscript.total_rules_checked}
-                </span>
-                <span className="text-sm text-slate-500">aturan otomatis terpenuhi</span>
-              </div>
-              <div className="mt-2 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out)] ${manuscript.error_findings > 0 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{
-                    transform: `scaleX(${manuscript.total_rules_checked === 0 ? 0 : manuscript.total_rules_passed / manuscript.total_rules_checked})`,
-                  }}
-                />
-              </div>
-            </div>
+            <Card className="mb-4 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold tabular-nums text-slate-900">
+                    {manuscript.total_rules_passed}/{manuscript.total_rules_checked}
+                  </span>
+                  <span className="text-sm text-slate-500">aturan otomatis terpenuhi</span>
+                </div>
+                <div className="mt-2 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out)] ${manuscript.error_findings > 0 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    style={{
+                      transform: `scaleX(${manuscript.total_rules_checked === 0 ? 0 : manuscript.total_rules_passed / manuscript.total_rules_checked})`,
+                    }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
             <FindingsView findings={findings} />
 

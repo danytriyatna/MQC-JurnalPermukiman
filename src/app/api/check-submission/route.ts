@@ -1,26 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
 import { saveManuscriptFile, deleteManuscriptFile } from "@/lib/storage/localStorage";
-import { createInspectionToken } from "@/lib/auth/token";
+import { enqueueScreeningJob, triggerBackgroundDrain } from "@/lib/queue/screeningQueue";
 import { db, manuscripts, manuscriptVersions } from "@/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-mqc-api-key",
-};
+function getCorsHeaders(): Record<string, string> {
+  const allowedOrigin = process.env.CORS_ALLOWED_ORIGIN?.trim() || "http://localhost:8000";
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, x-mqc-api-key",
+  };
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders,
+    headers: getCorsHeaders(),
   });
 }
 
 export async function POST(request: NextRequest) {
+  const corsHeaders = getCorsHeaders();
   // 1. Validasi Shared Secret Key
   const apiKey = request.headers.get("x-mqc-api-key");
   const secret = process.env.MQC_API_SECRET;
@@ -69,6 +73,7 @@ export async function POST(request: NextRequest) {
 
   const authorName = (formData.get("author_name") as string | null)?.trim() || null;
   const authorEmail = (formData.get("author_email") as string | null)?.trim() || null;
+  const customTitle = (formData.get("title") as string | null)?.trim() || null;
 
   // 3. Konversi ke Buffer & Validasi Sanitasi Berkas Ketat
   let buffer: Buffer;
@@ -138,10 +143,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Pastikan isi file XML utama dapat diuraikan dan tidak kosong
+  // Pastikan word/document.xml tidak kosong tanpa mendekompresi ulang string XML multi-MB jika ukuran di header ZIP sudah > 64 byte
   try {
-    const docXmlContent = await documentXmlFile.async("text");
-    if (!docXmlContent || docXmlContent.trim().length === 0) {
+    const uncompressedSize = (documentXmlFile as any)?._data?.uncompressedSize;
+    if (typeof uncompressedSize === "number" && uncompressedSize === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -149,6 +154,18 @@ export async function POST(request: NextRequest) {
         },
         { status: 400, headers: corsHeaders },
       );
+    }
+    if (typeof uncompressedSize !== "number" || uncompressedSize <= 64) {
+      const docXmlContent = await documentXmlFile.async("text");
+      if (!docXmlContent || docXmlContent.trim().length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Struktur word/document.xml kosong atau tidak dapat diuraikan.",
+          },
+          { status: 400, headers: corsHeaders },
+        );
+      }
     }
   } catch {
     return NextResponse.json(
@@ -161,7 +178,7 @@ export async function POST(request: NextRequest) {
   }
 
   const originalFileName = file instanceof File && file.name ? file.name : "naskah.docx";
-  const title = originalFileName.replace(/\.docx$/i, "");
+  const title = customTitle || originalFileName.replace(/\.docx$/i, "");
 
   // 4. Simpan Berkas Fisik ke Media Penyimpanan Lokal
   let storagePath: string;
@@ -179,6 +196,7 @@ export async function POST(request: NextRequest) {
 
   // 5. Catat / Mutakhirkan Naskah dalam Antrean Tugas Pemeriksaan (Status: pending)
   let manuscriptId: string = "";
+  let manuscriptVersionId: string = "";
   let versionNumber = 1;
 
   try {
@@ -227,10 +245,13 @@ export async function POST(request: NextRequest) {
           })
           .returning({ id: manuscriptVersions.id });
 
+        manuscriptVersionId = newVersion.id;
+
         // b. Mutakhirkan data naskah induk: status pending, reset counter
         await tx
           .update(manuscripts)
           .set({
+            title: customTitle || existingManuscript.title,
             status: "pending",
             versionNumber,
             currentVersionId: newVersion.id,
@@ -278,6 +299,8 @@ export async function POST(request: NextRequest) {
           })
           .returning({ id: manuscriptVersions.id });
 
+        manuscriptVersionId = newVersion.id;
+
         // c. Tautkan currentVersionId
         await tx
           .update(manuscripts)
@@ -299,12 +322,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 6. Generate Signed Token untuk Tautan Lembar Inspeksi
-  const inspectionToken = await createInspectionToken(manuscriptId, ojsSubmissionId);
-  const origin = request.nextUrl.origin || "http://localhost:3000";
-  const viewUrl = `${origin}/manuscripts/${manuscriptId}?token=${encodeURIComponent(inspectionToken)}`;
+  // 6. Daftarkan Job ke Antrean PostgreSQL (screening_jobs) secara Idempoten
+  let jobId: string | null = null;
+  try {
+    const queued = await enqueueScreeningJob({
+      manuscriptId,
+      manuscriptVersionId,
+      ojsSubmissionId,
+      versionNumber,
+    });
+    jobId = queued.jobId;
 
-  // 7. Kembalikan Respons Cepat (< 100ms)
+    // Trigger pemrosesan antrean secara asinkron (non-blocking) dengan Single-Flight Coalescing Lock.
+    // Meski 50 request masuk serentak, hanya 1 pool worker yang berjalan tanpa memicu thundering herd.
+    if (process.env.AUTO_DRAIN_ON_INGEST !== "false") {
+      setTimeout(() => {
+        void triggerBackgroundDrain({ concurrency: 4 });
+      }, 5);
+    }
+  } catch (queueErr) {
+    console.error("Gagal mendaftarkan job ke screening_jobs:", queueErr);
+  }
+
+  // 7. Kembalikan Respons Cepat (< 100ms) tanpa token/viewUrl yang tak terpakai
   return NextResponse.json(
     {
       success: true,
@@ -312,7 +352,7 @@ export async function POST(request: NextRequest) {
       message: "Naskah berhasil diterima dan terdaftar di antrean pemeriksaan redaksi.",
       manuscriptId,
       versionNumber,
-      viewUrl,
+      jobId,
     },
     {
       status: 200,

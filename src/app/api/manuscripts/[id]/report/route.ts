@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateReportDocx, ReportFinding } from "@/lib/docx/generateReport";
 import { verifyInspectionToken } from "@/lib/auth/token";
+import { resolveReviewedByForManuscript, buildOjsReportFileName } from "@/lib/ojs/ojsClient";
 import { db, manuscripts as manuscriptsTable, screeningRuns, findings as findingsTable, users } from "@/db";
 import { eq, desc } from "drizzle-orm";
 
@@ -60,6 +61,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         current_version_id: manuscriptsTable.currentVersionId,
         updated_at: manuscriptsTable.updatedAt,
         author_name: manuscriptsTable.authorName,
+        ojs_submission_id: manuscriptsTable.ojsSubmissionId,
+        assigned_editor_name: manuscriptsTable.assignedEditorName,
+        assigned_editor_fetched_at: manuscriptsTable.assignedEditorFetchedAt,
         uploader_name: users.fullName,
       })
       .from(manuscriptsTable)
@@ -163,13 +167,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
   }
 
+  const reviewedBy = await resolveReviewedByForManuscript({
+    id: manuscriptData.id,
+    ojsSubmissionId: manuscriptData.ojs_submission_id,
+    assignedEditorName: manuscriptData.assigned_editor_name,
+    assignedEditorFetchedAt: manuscriptData.assigned_editor_fetched_at,
+  });
+
   let buffer: Buffer;
   try {
     buffer = await generateReportDocx({
       manuscriptTitle: manuscriptData.title,
       originalFileName: manuscriptData.original_file_name,
       versionNumber: manuscriptData.version_number,
-      reviewedBy: manuscriptData.author_name || manuscriptData.uploader_name || "Penulis OJS",
+      reviewedBy,
       reviewedAt: new Date(manuscriptData.updated_at),
       totalRulesChecked: manuscriptData.total_rules_checked,
       totalRulesPassed: manuscriptData.total_rules_passed,
@@ -179,13 +190,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Gagal membuat laporan dokumen Word." }, { status: 500 });
   }
 
-  const safeName = manuscriptData.title.replace(/[^a-zA-Z0-9-_ ]/g, "").trim() || "laporan";
+  const downloadFileName = buildOjsReportFileName(manuscriptData.original_file_name);
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="Laporan - ${safeName}.docx"`,
+      "Content-Disposition": `attachment; filename="${downloadFileName}"`,
     },
   });
 }

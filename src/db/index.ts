@@ -17,7 +17,13 @@ const globalForDb = globalThis as unknown as {
   conn: postgres.Sql | undefined;
 };
 
-export const client = globalForDb.conn ?? postgres(connectionString);
+export const client =
+  globalForDb.conn ??
+  postgres(connectionString, {
+    max: Number(process.env.DB_POOL_MAX || "20") || 20,
+    idle_timeout: 20,
+    connect_timeout: 10,
+  });
 
 if (process.env.NODE_ENV !== "production") {
   globalForDb.conn = client;

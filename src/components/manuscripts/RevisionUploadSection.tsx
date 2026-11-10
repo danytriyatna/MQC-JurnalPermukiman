@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import UploadForm from "@/components/upload/UploadForm";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function RevisionUploadSection({ manuscriptId }: { manuscriptId: string }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <Card className="overflow-hidden shadow-sm">
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
@@ -26,13 +27,13 @@ export default function RevisionUploadSection({ manuscriptId }: { manuscriptId: 
         </svg>
       </button>
       {isOpen && (
-        <div className="border-t border-slate-100 px-4 py-4">
+        <CardContent className="border-t border-slate-100 px-4 py-4">
           <p className="mb-3 text-xs text-slate-500">
             Unggah versi revisi untuk naskah ini. Versi sebelumnya tetap tersimpan, dan hasil pemeriksaan akan diperbarui untuk versi baru.
           </p>
           <UploadForm manuscriptId={manuscriptId} />
-        </div>
+        </CardContent>
       )}
-    </div>
+    </Card>
   );
 }

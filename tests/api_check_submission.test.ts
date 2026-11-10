@@ -8,6 +8,7 @@ import JSZip from "jszip";
 import { OPTIONS, POST } from "../src/app/api/check-submission/route";
 import { POST as batchScreenPOST } from "../src/app/api/manuscripts/screen-batch/route";
 import { GET as getOriginalFile } from "../src/app/api/manuscripts/[id]/original/route";
+import { createInspectionToken } from "../src/lib/auth/token";
 import { db, manuscripts, manuscriptVersions, screeningRuns, client } from "../src/db";
 import { eq } from "drizzle-orm";
 import { getStorageDir } from "../src/lib/storage/localStorage";
@@ -20,6 +21,10 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
 
   before(async () => {
     process.env.MQC_API_SECRET = SECRET_KEY;
+    process.env.JWT_SECRET = "test_jwt_secret_at_least_32_characters_long_for_mqc_2026";
+    process.env.CORS_ALLOWED_ORIGIN = "http://localhost:8000";
+    process.env.OJS_SYNC_DRY_RUN = "true";
+    process.env.AUTO_DRAIN_ON_INGEST = "false";
     process.env.MANUSCRIPT_STORAGE_DIR = "storage/test_manuscripts";
 
     // Bersihkan naskah uji lama jika ada
@@ -58,10 +63,10 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     await client.end();
   });
 
-  it("handles OPTIONS preflight with required CORS headers", async () => {
+  it("handles OPTIONS preflight with required CORS allowlist headers", async () => {
     const res = await OPTIONS();
     assert.equal(res.status, 204);
-    assert.equal(res.headers.get("access-control-allow-origin"), "*");
+    assert.equal(res.headers.get("access-control-allow-origin"), "http://localhost:8000");
     assert.ok(res.headers.get("access-control-allow-headers")?.includes("x-mqc-api-key"));
   });
 
@@ -215,8 +220,8 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     assert.ok(body.message.includes("antrean"));
     assert.equal(body.versionNumber, 1);
     assert.ok(body.manuscriptId, "Returns manuscript UUID");
-    assert.ok(body.viewUrl?.includes(body.manuscriptId), "viewUrl contains manuscript ID");
-    assert.ok(body.viewUrl?.includes("token="), "viewUrl contains signed JWT token");
+    assert.ok(body.jobId, "Returns queued screening job UUID");
+    assert.equal(body.viewUrl, undefined, "Does not expose unused viewUrl token in response");
 
     createdManuscriptId = body.manuscriptId;
 
@@ -343,28 +348,20 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     assert.equal(dbRuns[0].status, "completed");
   });
 
-  it("allows downloading 'File Asli' using the signed token generated in viewUrl", async () => {
-    // Generate viewUrl with fresh signed token
-    const formData = new FormData();
-    const docxFile = new File([new Uint8Array(sampleDocxBuffer)], "naskah_test.docx", {
-      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    });
-    formData.append("file", docxFile);
-    formData.append("ojs_submission_id", String(TEST_OJS_SUBMISSION_ID));
+  it("enforces fail-fast when JWT_SECRET is missing and allows downloading 'File Asli' when valid token is provided", async () => {
+    const prevSecret = process.env.JWT_SECRET;
+    try {
+      process.env.JWT_SECRET = "";
+      await assert.rejects(
+        () => createInspectionToken(createdManuscriptId, TEST_OJS_SUBMISSION_ID),
+        /JWT_SECRET wajib diatur/,
+      );
+    } finally {
+      process.env.JWT_SECRET = prevSecret;
+    }
 
-    const checkReq = new NextRequest("http://localhost:3000/api/check-submission", {
-      method: "POST",
-      headers: {
-        "x-mqc-api-key": SECRET_KEY,
-      },
-      body: formData,
-    });
-
-    const checkRes = await POST(checkReq);
-    const checkBody = await checkRes.json();
-    const url = new URL(checkBody.viewUrl);
-    const token = url.searchParams.get("token");
-    assert.ok(token, "Token must be present in viewUrl");
+    const token = await createInspectionToken(createdManuscriptId, TEST_OJS_SUBMISSION_ID);
+    assert.ok(token, "Token must be generated when JWT_SECRET is valid");
 
     // Unduh File Asli dengan token
     const downloadReq = new NextRequest(

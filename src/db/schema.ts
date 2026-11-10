@@ -51,12 +51,19 @@ export const manuscripts = pgTable(
     ojsUserId: integer("ojs_user_id"),
     authorName: text("author_name"),
     authorEmail: text("author_email"),
+    assignedEditorName: text("assigned_editor_name"),
+    assignedEditorFetchedAt: timestamp("assigned_editor_fetched_at", { withTimezone: true }),
+    ojsReportSubmissionFileId: integer("ojs_report_submission_file_id"),
+    ojsSyncStatus: text("ojs_sync_status").notNull().default("idle"),
+    ojsLastSyncedAt: timestamp("ojs_last_synced_at", { withTimezone: true }),
+    ojsSyncError: text("ojs_sync_error"),
   },
   (table) => [
     index("manuscripts_updated_at_idx").on(table.updatedAt),
     index("manuscripts_status_idx").on(table.status),
     index("manuscripts_deleted_at_idx").on(table.deletedAt),
     index("manuscripts_ojs_submission_id_idx").on(table.ojsSubmissionId),
+    index("manuscripts_ojs_sync_status_idx").on(table.ojsSyncStatus),
   ],
 );
 
@@ -225,6 +232,42 @@ export const referenceChecks = pgTable(
     index("reference_checks_pending_idx")
       .on(table.runId, table.entryIndex)
       .where(sql`verdict = 'pending'`),
+  ],
+);
+
+// ============================================================
+// screening_jobs — durable job queue (FOR UPDATE SKIP LOCKED)
+// ============================================================
+export const screeningJobs = pgTable(
+  "screening_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    manuscriptId: uuid("manuscript_id")
+      .notNull()
+      .references(() => manuscripts.id, { onDelete: "cascade" }),
+    manuscriptVersionId: uuid("manuscript_version_id")
+      .notNull()
+      .references(() => manuscriptVersions.id, { onDelete: "cascade" }),
+    ojsSubmissionId: integer("ojs_submission_id"),
+    versionNumber: integer("version_number").notNull().default(1),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    status: text("status").notNull().default("pending"), // pending | processing | completed | failed | dead
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    lockedBy: text("locked_by"),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    lastError: text("last_error"),
+    syncMode: text("sync_mode").notNull().default("dry_run"), // dry_run | live | skipped
+    syncPayload: jsonb("sync_payload"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("screening_jobs_status_available_idx").on(table.status, table.availableAt),
+    index("screening_jobs_manuscript_id_idx").on(table.manuscriptId),
+    index("screening_jobs_locked_until_idx").on(table.lockedUntil),
   ],
 );
 

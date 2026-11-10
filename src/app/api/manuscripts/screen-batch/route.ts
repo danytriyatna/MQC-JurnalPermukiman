@@ -1,26 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { screenManuscript, summarize } from "@/lib/docx/screenManuscript";
+import { generateReportDocx, ReportFinding } from "@/lib/docx/generateReport";
 import { readManuscriptFile } from "@/lib/storage/localStorage";
-import { db, manuscripts, manuscriptVersions, screeningRuns, findings } from "@/db";
+import {
+  resolveReviewedByForManuscript,
+  uploadOrUpdateReportToOjs,
+  buildOjsReportFileName,
+} from "@/lib/ojs/ojsClient";
+import { buildJobIdempotencyKey } from "@/lib/queue/screeningQueue";
+import { db, manuscripts, manuscriptVersions, screeningRuns, findings, screeningJobs } from "@/db";
 import { eq, desc } from "drizzle-orm";
 import { ManuscriptStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-mqc-api-key",
-};
+function getCorsHeaders(): Record<string, string> {
+  const allowedOrigin = process.env.CORS_ALLOWED_ORIGIN?.trim() || "http://localhost:8000";
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-mqc-api-key",
+  };
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders,
+    headers: getCorsHeaders(),
   });
 }
 
 export async function POST(request: NextRequest) {
+  const corsHeaders = getCorsHeaders();
   let body: { manuscriptIds?: unknown };
   try {
     body = await request.json();
@@ -183,18 +194,11 @@ export async function POST(request: NextRequest) {
       const passed = score >= 80 && summary.errorFindings === 0;
       const nextStatus: ManuscriptStatus = passed ? "passed" : "needs_revision";
 
-      // 6. Simpan hasil penapisan ke database secara transaksional
+      // 6. Simpan hasil penapisan ke database secara transaksional (1 query delete cascade untuk screening_runs lama)
       await db.transaction(async (tx) => {
-        // Bersihkan screening run lama untuk versi ini jika ada guna menghindari duplikasi
-        const prevRuns = await tx
-          .select({ id: screeningRuns.id })
-          .from(screeningRuns)
+        await tx
+          .delete(screeningRuns)
           .where(eq(screeningRuns.manuscriptVersionId, versionRow.id));
-
-        for (const run of prevRuns) {
-          await tx.delete(findings).where(eq(findings.screeningRunId, run.id));
-          await tx.delete(screeningRuns).where(eq(screeningRuns.id, run.id));
-        }
 
         // Simpan screeningRuns ke mqc_db
         const [newRun] = await tx
@@ -253,6 +257,105 @@ export async function POST(request: NextRequest) {
           })
           .where(eq(manuscripts.id, manuscriptId));
       });
+
+      // 7. Resolusi "Diperiksa oleh" (Opsi B) & Sinkronisasi Laporan ke OJS (Dry-Run di Fase 1)
+      try {
+        const reviewedBy = await resolveReviewedByForManuscript({
+          id: manuscript.id,
+          ojsSubmissionId: manuscript.ojsSubmissionId,
+          assignedEditorName: manuscript.assignedEditorName,
+          assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt,
+        });
+
+        const reportFindings: ReportFinding[] = screening.findings.map((f) => ({
+          ruleId: f.ruleId,
+          section: f.section as any,
+          severity: f.severity as any,
+          checkType: f.checkType as any,
+          location: f.location || "",
+          currentValue: f.currentValue || "",
+          expectedValue: f.expectedValue || "",
+          suggestedFix: f.suggestedFix || "",
+        }));
+
+        const reportBuffer = await generateReportDocx({
+          manuscriptTitle: manuscript.title,
+          originalFileName: versionRow.originalFileName,
+          versionNumber: versionRow.versionNumber,
+          reviewedBy,
+          reviewedAt: new Date(),
+          totalRulesChecked: screening.totalRulesChecked,
+          totalRulesPassed: screening.totalRulesPassed,
+          findings: reportFindings,
+        });
+
+        let syncModeResult: "dry_run" | "live" | "skipped" = "skipped";
+        let syncPayloadData: Record<string, unknown> | null = null;
+        let nextOjsFileId = manuscript.ojsReportSubmissionFileId ?? null;
+
+        if (manuscript.ojsSubmissionId) {
+          const reportFileName = buildOjsReportFileName(
+            versionRow.originalFileName || manuscript.originalFileName,
+          );
+          const uploadResult = await uploadOrUpdateReportToOjs({
+            ojsSubmissionId: manuscript.ojsSubmissionId,
+            manuscriptId: manuscript.id,
+            versionNumber: versionRow.versionNumber,
+            reportBuffer,
+            fileName: reportFileName,
+            existingOjsSubmissionFileId: manuscript.ojsReportSubmissionFileId,
+          });
+          syncModeResult = uploadResult.mode;
+          syncPayloadData = { ...uploadResult };
+          if (uploadResult.submissionFileId) {
+            nextOjsFileId = uploadResult.submissionFileId;
+          }
+        }
+
+        const finalSyncStatus =
+          syncModeResult === "live"
+            ? "synced"
+            : syncModeResult === "dry_run"
+              ? "dry_run"
+              : "idle";
+
+        await db
+          .update(manuscripts)
+          .set({
+            ojsReportSubmissionFileId: nextOjsFileId,
+            ojsSyncStatus: finalSyncStatus,
+            ojsLastSyncedAt: new Date(),
+            ojsSyncError: null,
+          })
+          .where(eq(manuscripts.id, manuscriptId));
+
+        const idempotencyKey = buildJobIdempotencyKey(
+          manuscript.id,
+          manuscript.ojsSubmissionId,
+          versionRow.versionNumber,
+        );
+
+        await db
+          .update(screeningJobs)
+          .set({
+            status: "completed",
+            syncMode: syncModeResult,
+            syncPayload: syncPayloadData,
+            lockedBy: null,
+            lockedUntil: null,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(screeningJobs.idempotencyKey, idempotencyKey));
+      } catch (syncErr: any) {
+        await db
+          .update(manuscripts)
+          .set({
+            ojsSyncStatus: "failed",
+            ojsSyncError: syncErr?.message || "Gagal menyinkronkan laporan ke OJS",
+          })
+          .where(eq(manuscripts.id, manuscriptId));
+      }
 
       results.push({
         manuscriptId,

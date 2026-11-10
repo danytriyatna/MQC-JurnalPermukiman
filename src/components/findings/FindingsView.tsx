@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { FindingSection } from "@/lib/docx/types";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export interface FindingRowData {
   id: string;
@@ -59,18 +61,12 @@ function FindingRow({ finding }: { finding: FindingRowData }) {
     <div className="border-b border-slate-100 px-4 py-3 last:border-b-0">
       <div className="flex flex-wrap items-center gap-2">
         {finding.severity === "error" ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20">
-            Wajib diperbaiki
-          </span>
+          <Badge variant="destructive">Wajib diperbaiki</Badge>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
-            Disarankan
-          </span>
+          <Badge variant="warning">Disarankan</Badge>
         )}
         {finding.checkType === "manual_review_suggested" && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-400/20">
-            Perlu verifikasi manual
-          </span>
+          <Badge variant="secondary">Perlu verifikasi manual</Badge>
         )}
         <span className="text-xs text-slate-500">{finding.location}</span>
       </div>
@@ -99,7 +95,7 @@ function FindingRow({ finding }: { finding: FindingRowData }) {
 export default function FindingsView({ findings }: { findings: FindingRowData[] }) {
   if (findings.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+      <Card className="flex flex-col items-center justify-center border-dashed px-6 py-16 text-center shadow-none">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50">
           <svg className="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -109,7 +105,7 @@ export default function FindingsView({ findings }: { findings: FindingRowData[] 
         <p className="mt-1 max-w-sm text-sm text-slate-500">
           Tidak ada temuan ketidaksesuaian format. Beberapa hal (mis. gaya sitasi, usia referensi) tetap disarankan dicek manual.
         </p>
-      </div>
+      </Card>
     );
   }
 
@@ -121,14 +117,18 @@ export default function FindingsView({ findings }: { findings: FindingRowData[] 
   return (
     <div className="flex flex-col gap-4">
       {bySection.map((group) => (
-        <div key={group.section} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-            <h3 className="text-sm font-semibold text-slate-900">{SECTION_LABELS[group.section]}</h3>
-          </div>
-          {group.items.map((finding) => (
-            <FindingRow key={finding.id} finding={finding} />
-          ))}
-        </div>
+        <Card key={group.section} className="overflow-hidden shadow-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
+            <CardTitle className="text-sm font-semibold text-slate-900">
+              {SECTION_LABELS[group.section]}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {group.items.map((finding) => (
+              <FindingRow key={finding.id} finding={finding} />
+            ))}
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

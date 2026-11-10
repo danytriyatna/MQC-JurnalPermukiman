@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { screenManuscript, summarize } from "@/lib/docx/screenManuscript";
-import { DocxParseError } from "@/lib/docx/parseDocx";
-import { FindingDraft } from "@/lib/docx/types";
+import { saveManuscriptFile } from "@/lib/storage/localStorage";
+import { validateDocxFileName, validateDocxSize } from "@/lib/upload/validateFile";
 import { receiveUploadedManuscript } from "@/lib/upload/receiveUpload";
+import { db, manuscripts, manuscriptVersions, screeningRuns, findings, users } from "@/db";
+import { eq } from "drizzle-orm";
+import { ManuscriptStatus } from "@/lib/types";
 
 const RULE_SET_VERSION = "jurnal-permukiman-2026-v1";
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -13,127 +17,242 @@ interface RouteParams {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { id: manuscriptId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.json({ error: "Anda harus login." }, { status: 401 });
-  }
-
-  const { data: manuscript, error: manuscriptFetchError } = await supabase
-    .from("manuscripts")
-    .select("id, version_number")
-    .eq("id", manuscriptId)
-    .single();
-
-  if (manuscriptFetchError || !manuscript) {
+  if (!UUID_REGEX.test(manuscriptId)) {
     return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
   }
 
-  // The browser has already uploaded the .docx to Storage; this only receives
-  // its key and reads the bytes back. See receiveUploadedManuscript for why
-  // the file does not travel in this request's body.
-  const received = await receiveUploadedManuscript(request, supabase, user.id);
-  if (!received.ok) {
-    return NextResponse.json({ error: received.error }, { status: received.status });
+  // 1. Cek keberadaan naskah induk di PostgreSQL mqc_db
+  const msRows = await db
+    .select()
+    .from(manuscripts)
+    .where(eq(manuscripts.id, manuscriptId))
+    .limit(1);
+
+  if (msRows.length === 0) {
+    return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
   }
 
-  const { storagePath, originalFileName, buffer } = received;
-  const newVersionNumber = manuscript.version_number + 1;
+  const manuscript = msRows[0];
 
-  await supabase
-    .from("manuscripts")
-    .update({ status: "processing" })
-    .eq("id", manuscriptId);
+  let originalFileName = "";
+  let buffer: Buffer;
+  let storagePath: string;
 
-  const markFailed = async (message: string) => {
-    await supabase
-      .from("manuscripts")
-      .update({ status: "processing_failed" })
-      .eq("id", manuscriptId);
-    return NextResponse.json({ error: message }, { status: 500 });
-  };
+  const contentType = request.headers.get("content-type") || "";
 
-  let screening: Awaited<ReturnType<typeof screenManuscript>> | null = null;
-  let parseStatus: "success" | "failed" = "success";
-  let parseErrorMessage: string | null = null;
+  // 2. Ekstraksi berkas revisi dari FormData atau legacy JSON
+  if (contentType.includes("multipart/form-data")) {
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Gagal memproses data formulir (invalid form-data)." },
+        { status: 400 },
+      );
+    }
 
+    const file = formData.get("file");
+    if (!file || !(file instanceof Blob)) {
+      return NextResponse.json(
+        { error: "Berkas revisi tidak ditemukan dalam form data." },
+        { status: 400 },
+      );
+    }
+
+    originalFileName = (file as any).name || "revisi.docx";
+    const nameError = validateDocxFileName(originalFileName);
+    if (nameError) {
+      return NextResponse.json({ error: nameError }, { status: 400 });
+    }
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    } catch {
+      return NextResponse.json(
+        { error: "Gagal membaca byte stream berkas naskah." },
+        { status: 500 },
+      );
+    }
+
+    const sizeError = validateDocxSize(buffer.length);
+    if (sizeError) {
+      return NextResponse.json({ error: sizeError }, { status: 400 });
+    }
+
+    // Simpan ke disk fisik lokal (storage/manuscripts/revisions/...)
+    const saveResult = await saveManuscriptFile(buffer, originalFileName, "revisions");
+    storagePath = saveResult.storagePath;
+  } else {
+    // Jalur mundur: Legacy JSON
+    let supabaseUser: any = null;
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      supabaseUser = user;
+    } catch {
+      // Supabase offline
+    }
+
+    const supabase = await createClient().catch(() => null);
+    const received =
+      supabaseUser && supabase
+        ? await receiveUploadedManuscript(request, supabase, supabaseUser.id)
+        : { ok: false as const, error: "Unggahan harus menggunakan format FormData.", status: 400 };
+
+    if (!received.ok) {
+      return NextResponse.json({ error: received.error }, { status: received.status });
+    }
+
+    storagePath = received.storagePath;
+    originalFileName = received.originalFileName;
+    buffer = received.buffer;
+  }
+
+  // 3. Resolusi Pengguna (Opsional / Staff / Default)
+  let userId: string | null = null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) userId = user.id;
+  } catch {
+    // Supabase auth offline
+  }
+
+  if (!userId) {
+    const [firstUser] = await db.select({ id: users.id }).from(users).limit(1);
+    if (firstUser) userId = firstUser.id;
+  }
+
+  const newVersionNumber = (manuscript.versionNumber || 1) + 1;
+
+  // 4. Update status naskah induk menjadi "processing"
+  await db
+    .update(manuscripts)
+    .set({ status: "processing", updatedAt: new Date() })
+    .where(eq(manuscripts.id, manuscriptId));
+
+  // 5. Simpan baris versi baru di manuscript_versions
+  const [version] = await db
+    .insert(manuscriptVersions)
+    .values({
+      manuscriptId,
+      versionNumber: newVersionNumber,
+      originalFileName,
+      fileStoragePath: storagePath,
+      uploadedBy: userId,
+      parseStatus: "pending",
+    })
+    .returning({ id: manuscriptVersions.id });
+
+  await db
+    .update(manuscripts)
+    .set({
+      currentVersionId: version.id,
+      versionNumber: newVersionNumber,
+      originalFileName,
+    })
+    .where(eq(manuscripts.id, manuscriptId));
+
+  // 6. Eksekusi Engine Penapisan Format DOCX
+  let screening;
   try {
     screening = await screenManuscript(buffer);
-  } catch (err) {
-    parseStatus = "failed";
-    parseErrorMessage =
-      err instanceof DocxParseError ? err.message : "Gagal memproses isi dokumen.";
-  }
-
-  const { data: version, error: versionError } = await supabase
-    .from("manuscript_versions")
-    .insert({
-      manuscript_id: manuscriptId,
-      version_number: newVersionNumber,
-      original_file_name: originalFileName,
-      file_storage_path: storagePath,
-      uploaded_by: user.id,
-      parse_status: parseStatus,
-      parse_error_message: parseErrorMessage,
-    })
-    .select("id")
-    .single();
-
-  if (versionError || !version) {
-    return markFailed(`Gagal menyimpan versi naskah: ${versionError?.message}`);
-  }
-
-  if (screening) {
-    const { data: run, error: runError } = await supabase
-      .from("screening_runs")
-      .insert({
-        manuscript_version_id: version.id,
-        rule_set_version: RULE_SET_VERSION,
-        total_rules_checked: screening.totalRulesChecked,
-        total_rules_passed: screening.totalRulesPassed,
+  } catch (err: any) {
+    await db
+      .update(manuscriptVersions)
+      .set({
+        parseStatus: "failed",
+        parseErrorMessage: err?.message || "Gagal memproses dokumen .docx",
       })
-      .select("id")
-      .single();
+      .where(eq(manuscriptVersions.id, version.id));
 
-    if (!runError && run) {
-      const findingRows = screening.findings.map((f: FindingDraft) => ({
-        screening_run_id: run.id,
-        section: f.section,
-        rule_id: f.ruleId,
-        severity: f.severity,
-        check_type: f.checkType,
-        location: f.location,
-        current_value: f.currentValue,
-        expected_value: f.expectedValue,
-        suggested_fix: f.suggestedFix,
-      }));
+    await db
+      .update(manuscripts)
+      .set({
+        status: "processing_failed",
+        updatedAt: new Date(),
+      })
+      .where(eq(manuscripts.id, manuscriptId));
 
-      if (findingRows.length > 0) {
-        await supabase.from("findings").insert(findingRows);
-      }
-    }
+    return NextResponse.json(
+      { error: err?.message || "Gagal memproses dokumen .docx" },
+      { status: 500 },
+    );
   }
 
-  const summary = screening
-    ? summarize(screening.findings)
-    : { errorFindings: 0, warningFindings: 0, status: "processing_failed" as const };
+  // 7. Hitung Skor & Status Kelulusan
+  const summary = summarize(screening.findings);
+  const score =
+    screening.totalRulesChecked > 0
+      ? Math.round((screening.totalRulesPassed / screening.totalRulesChecked) * 100)
+      : 0;
+  const passed = score >= 80 && summary.errorFindings === 0;
+  const nextStatus: ManuscriptStatus = passed ? "passed" : "needs_revision";
 
-  await supabase
-    .from("manuscripts")
-    .update({
-      status: parseStatus === "failed" ? "processing_failed" : summary.status,
-      current_version_id: version.id,
-      version_number: newVersionNumber,
-      original_file_name: originalFileName,
-      total_rules_checked: screening?.totalRulesChecked ?? 0,
-      total_rules_passed: screening?.totalRulesPassed ?? 0,
-      error_findings: summary.errorFindings,
-      warning_findings: summary.warningFindings,
-    })
-    .eq("id", manuscriptId);
+  // 8. Simpan screeningRuns & findings secara transaksional
+  await db.transaction(async (tx) => {
+    const [newRun] = await tx
+      .insert(screeningRuns)
+      .values({
+        manuscriptVersionId: version.id,
+        ruleSetVersion: RULE_SET_VERSION,
+        totalRulesChecked: screening.totalRulesChecked,
+        totalRulesPassed: screening.totalRulesPassed,
+        totalRulesFailed: Math.max(0, screening.totalRulesChecked - screening.totalRulesPassed),
+        status: "completed",
+        errorFindings: summary.errorFindings,
+        warningFindings: summary.warningFindings,
+        noticeFindings: 0,
+      })
+      .returning({ id: screeningRuns.id });
+
+    if (screening.findings.length > 0) {
+      await tx.insert(findings).values(
+        screening.findings.map((f) => ({
+          screeningRunId: newRun.id,
+          section: f.section,
+          ruleId: f.ruleId,
+          severity: f.severity,
+          checkType: f.checkType,
+          location: f.location || "",
+          currentValue: f.currentValue || "",
+          expectedValue: f.expectedValue || "",
+          suggestedFix: f.suggestedFix || "",
+          ruleName: f.ruleId,
+          message: f.suggestedFix || f.expectedValue || "",
+        })),
+      );
+    }
+
+    await tx
+      .update(manuscriptVersions)
+      .set({
+        parseStatus: "success",
+        parseErrorMessage: null,
+      })
+      .where(eq(manuscriptVersions.id, version.id));
+
+    await tx
+      .update(manuscripts)
+      .set({
+        status: nextStatus,
+        versionNumber: newVersionNumber,
+        currentVersionId: version.id,
+        totalRulesChecked: screening.totalRulesChecked,
+        totalRulesPassed: screening.totalRulesPassed,
+        errorFindings: summary.errorFindings,
+        warningFindings: summary.warningFindings,
+        updatedAt: new Date(),
+      })
+      .where(eq(manuscripts.id, manuscriptId));
+  });
 
   return NextResponse.json({ manuscriptId, versionId: version.id }, { status: 201 });
 }

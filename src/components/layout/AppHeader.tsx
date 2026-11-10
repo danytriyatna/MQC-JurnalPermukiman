@@ -39,22 +39,12 @@ export default async function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <a
+          <Link
             href="/manuscripts/upload"
-            className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-[background-color,transform] duration-150 hover:bg-slate-800 active:scale-[0.97]"
+            className="inline-flex items-center rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-[background-color,transform] duration-150 hover:bg-slate-800 active:scale-[0.97]"
           >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            <span className="hidden sm:inline">Unggah Naskah</span>
-          </a>
+            Unggah Naskah
+          </Link>
 
           <AccountMenu userName={userName} userEmail={userEmail} />
         </div>
