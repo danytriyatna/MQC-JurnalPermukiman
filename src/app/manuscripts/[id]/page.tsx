@@ -1,5 +1,4 @@
 import fs from "fs/promises";
-import path from "path";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
@@ -14,9 +13,43 @@ import ReferenceVerificationPanel, {
   ReferenceRunData,
 } from "@/components/references/ReferenceVerificationPanel";
 import { screenManuscript } from "@/lib/docx/screenManuscript";
+import { findOjsSubmission, readOjsReferenceRun } from "@/lib/ojs/localStore";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateID } from "@/lib/status";
 import { ManuscriptStatus } from "@/lib/types";
+
+function ReportDownloadButtons({
+  manuscriptId,
+  hasOriginalFile,
+}: {
+  manuscriptId: string;
+  hasOriginalFile: boolean;
+}) {
+  return (
+    <>
+      {hasOriginalFile && (
+        <a
+          href={`/api/manuscripts/${manuscriptId}/original`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#DFD9D2] bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-xs transition-colors hover:bg-[#FAF8F5]"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-12a1.5 1.5 0 0 1-1.5-1.5v-4.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3" />
+          </svg>
+          File Asli
+        </a>
+      )}
+      <a
+        href={`/api/manuscripts/${manuscriptId}/report`}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[#F4D4C9] bg-[#FDF4F0] px-3 py-1.5 text-xs font-bold text-[#A0320A] shadow-xs transition-colors hover:bg-[#C13D0D] hover:text-white"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v13.5m0 0-4.5-4.5M12 16.5l4.5-4.5M4.5 19.5h15" />
+        </svg>
+        Ekspor Laporan
+      </a>
+    </>
+  );
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -331,34 +364,14 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
           },
         ]}
         sourceLabel="Pemeriksaan Format Mandiri"
+        manuscriptActions={<ReportDownloadButtons manuscriptId={id} hasOriginalFile={false} />}
+        extraSidebarContent={<RevisionUploadSection manuscriptId={id} />}
       />
     );
   }
 
   if (id.startsWith("ojs-")) {
-    let ojsItem: {
-      id: string;
-      title: string;
-      originalFileName: string;
-      uploadedBy: string;
-      status: ManuscriptStatus;
-      versionNumber?: number;
-      totalRulesChecked?: number;
-      totalRulesPassed?: number;
-      errorFindings?: number;
-      warningFindings?: number;
-      filePath?: string | null;
-      updatedAt: string;
-    } | null = null;
-
-    try {
-      const storePath = path.join(process.cwd(), "data", "ojs_synced_submissions.json");
-      const raw = await fs.readFile(storePath, "utf-8");
-      const list = JSON.parse(raw) as (typeof ojsItem)[];
-      ojsItem = list.find((m) => m?.id === id) ?? null;
-    } catch {
-      ojsItem = null;
-    }
+    const ojsItem = await findOjsSubmission(id);
 
     if (!ojsItem) {
       notFound();
@@ -386,6 +399,8 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
       }
     }
 
+    const ojsRefData = await readOjsReferenceRun(id);
+
     return (
       <ManuscriptDetailShell
         title={ojsItem.title}
@@ -411,6 +426,19 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
         ]}
         parseErrorMessage={parseErrorMessage}
         sourceLabel="Sinkronisasi OJS Jurnal Permukiman"
+        manuscriptActions={
+          <ReportDownloadButtons manuscriptId={id} hasOriginalFile={Boolean(ojsItem.filePath)} />
+        }
+        extraMainContent={
+          ojsItem.filePath ? (
+            <ReferenceVerificationPanel
+              manuscriptId={id}
+              initialRun={ojsRefData.run}
+              initialChecks={ojsRefData.checks}
+            />
+          ) : undefined
+        }
+        extraSidebarContent={<RevisionUploadSection manuscriptId={id} />}
       />
     );
   }
@@ -541,26 +569,7 @@ export default async function ManuscriptDetailPage({ params }: PageProps) {
       manuscriptActions={
         <>
           {manuscript.current_version_id && (
-            <>
-              <a
-                href={`/api/manuscripts/${manuscript.id}/original`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#DFD9D2] bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-xs transition-colors hover:bg-[#FAF8F5]"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v4.5a1.5 1.5 0 0 1-1.5 1.5h-12a1.5 1.5 0 0 1-1.5-1.5v-4.5M7.5 10.5 12 15m0 0 4.5-4.5M12 15V3" />
-                </svg>
-                File Asli
-              </a>
-              <a
-                href={`/api/manuscripts/${manuscript.id}/report`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#F4D4C9] bg-[#FDF4F0] px-3 py-1.5 text-xs font-bold text-[#A0320A] shadow-xs transition-colors hover:bg-[#C13D0D] hover:text-white"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v13.5m0 0-4.5-4.5M12 16.5l4.5-4.5M4.5 19.5h15" />
-                </svg>
-                Ekspor Laporan
-              </a>
-            </>
+            <ReportDownloadButtons manuscriptId={manuscript.id} hasOriginalFile />
           )}
           <DeleteManuscriptButton manuscriptId={manuscript.id} />
         </>

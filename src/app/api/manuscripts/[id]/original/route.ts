@@ -1,4 +1,6 @@
+import fs from "fs/promises";
 import { NextResponse } from "next/server";
+import { findOjsSubmission } from "@/lib/ojs/localStore";
 import { createClient } from "@/lib/supabase/server";
 
 interface RouteParams {
@@ -7,6 +9,26 @@ interface RouteParams {
 
 export async function GET(_request: Request, { params }: RouteParams) {
   const { id } = await params;
+
+  if (id.startsWith("ojs-")) {
+    const ojsItem = await findOjsSubmission(id);
+    if (!ojsItem?.filePath) {
+      return NextResponse.json({ error: "Berkas asli naskah OJS tidak tersedia." }, { status: 404 });
+    }
+    try {
+      const buffer = await fs.readFile(ojsItem.filePath);
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "Content-Disposition": `attachment; filename="${ojsItem.originalFileName}"`,
+        },
+      });
+    } catch {
+      return NextResponse.json({ error: "Gagal membaca berkas naskah OJS." }, { status: 500 });
+    }
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

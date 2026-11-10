@@ -1,4 +1,10 @@
+import fs from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  findOjsSubmission,
+  readOjsReferenceRun,
+  writeOjsReferenceRun,
+} from "@/lib/ojs/localStore";
 import { createClient } from "@/lib/supabase/server";
 import { parseDocx, DocxParseError } from "@/lib/docx/parseDocx";
 import { extractReferences } from "@/lib/references/extractReferences";
@@ -143,6 +149,16 @@ async function requireVersion(supabase: Supabase, manuscriptId: string) {
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+
+  if (id.startsWith("ojs-")) {
+    const ojsItem = await findOjsSubmission(id);
+    if (!ojsItem) {
+      return NextResponse.json({ error: "Naskah OJS tidak ditemukan." }, { status: 404 });
+    }
+    const stored = await readOjsReferenceRun(id);
+    return NextResponse.json(stored);
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -180,6 +196,70 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+
+  if (id.startsWith("ojs-")) {
+    const ojsItem = await findOjsSubmission(id);
+    if (!ojsItem?.filePath) {
+      return NextResponse.json(
+        { error: "Berkas .docx naskah OJS tidak tersedia untuk verifikasi referensi." },
+        { status: 404 },
+      );
+    }
+
+    let entries: ReferenceEntry[];
+    try {
+      const buf = await fs.readFile(ojsItem.filePath);
+      const doc = await parseDocx(buf);
+      entries = extractReferences(doc);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: err instanceof DocxParseError ? err.message : "Gagal membaca isi dokumen OJS.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (entries.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Tidak ada daftar pustaka yang dapat dibaca. Pastikan naskah memiliki bagian References/Daftar Pustaka.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const runId = `ojs-run-${Date.now()}`;
+    const run = {
+      id: runId,
+      source_set_version: REFERENCE_SOURCE_SET_VERSION,
+      total_references: entries.length,
+      started_at: new Date().toISOString(),
+      completed_at: null,
+    };
+
+    const checks = entries.map((entry) => ({
+      id: `${runId}-${entry.entryIndex}`,
+      entry_index: entry.entryIndex,
+      raw_text: entry.rawText,
+      kind: entry.kind,
+      doi: entry.doi,
+      url: entry.url,
+      verdict: "pending" as const,
+      confidence: null,
+      note: null,
+      match_source: null,
+      match_title: null,
+      match_year: null,
+      match_url: null,
+      match_similarity: null,
+    }));
+
+    await writeOjsReferenceRun(id, { run, checks });
+    return NextResponse.json({ run, remaining: entries.length }, { status: 201 });
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -268,6 +348,60 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+
+  if (id.startsWith("ojs-")) {
+    const stored = await readOjsReferenceRun(id);
+    if (!stored.run) {
+      return NextResponse.json(
+        { error: "Proses verifikasi tidak ditemukan untuk naskah ini." },
+        { status: 404 },
+      );
+    }
+
+    const pending = stored.checks
+      .filter((c) => c.verdict === "pending")
+      .slice(0, BATCH_SIZE);
+
+    const results = await mapWithConcurrency(pending, CONCURRENCY, async (row) => {
+      const rebuilt = entryFromStoredRow({
+        ...row,
+        title: null,
+        cited_year: null,
+      });
+      const result = await verifyReference(rebuilt);
+      return {
+        id: row.id,
+        verdict: result.verdict,
+        confidence: result.confidence,
+        note: result.note,
+        match_source: result.match?.source ?? null,
+        match_title: result.match?.title ?? null,
+        match_year: result.match?.year ?? null,
+        match_url: result.match?.url ?? null,
+        match_similarity: result.match?.titleSimilarity ?? null,
+      };
+    });
+
+    const resultMap = new Map(results.map((r) => [r.id, r]));
+    const updatedChecks = stored.checks.map((c) => {
+      const hit = resultMap.get(c.id);
+      return hit ? { ...c, ...hit } : c;
+    });
+
+    const stillPending = updatedChecks.filter((c) => c.verdict === "pending").length;
+    const updatedRun = {
+      ...stored.run,
+      completed_at: stillPending === 0 ? new Date().toISOString() : stored.run.completed_at,
+    };
+
+    await writeOjsReferenceRun(id, { run: updatedRun, checks: updatedChecks });
+    return NextResponse.json({
+      remaining: stillPending,
+      checked: pending.length,
+      checks: updatedChecks,
+    });
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
