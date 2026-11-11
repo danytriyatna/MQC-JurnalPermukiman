@@ -134,62 +134,62 @@ function CheckRow({ row }: { row: ReferenceCheckRowData }) {
   const style = VERDICT_STYLES[row.verdict] ?? VERDICT_STYLES.pending;
 
   return (
-    <div className="border-b border-slate-100 px-4 py-3 last:border-b-0">
+    <div className="border-b border-[#EFEAE4] px-5 py-3.5 transition-colors hover:bg-[#FDF9F6] last:border-b-0">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs tabular-nums text-slate-400">#{row.entry_index}</span>
+        <span className="text-xs font-medium tabular-nums text-stone-400">#{row.entry_index}</span>
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${style.badge}`}
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${style.badge}`}
         >
           {style.label}
         </span>
-        <span className="text-xs text-slate-500">{KIND_LABELS[row.kind]}</span>
+        <span className="text-xs text-stone-500">{KIND_LABELS[row.kind]}</span>
         {row.confidence && (
-          <span className="text-xs text-slate-400">{CONFIDENCE_LABELS[row.confidence]}</span>
+          <span className="text-xs text-stone-400">{CONFIDENCE_LABELS[row.confidence]}</span>
         )}
       </div>
 
-      <p className="mt-1.5 text-sm text-slate-800">{row.raw_text}</p>
+      <p className="mt-1.5 text-sm text-stone-800">{row.raw_text}</p>
 
-      {row.note && <p className="mt-1.5 text-sm text-slate-600">{row.note}</p>}
+      {row.note && <p className="mt-1.5 text-sm text-stone-600">{row.note}</p>}
 
       {(row.match_title || row.match_url || row.doi) && (
         <button
           type="button"
           onClick={() => setIsOpen((v) => !v)}
-          className="mt-1.5 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 transition-colors duration-150 hover:text-slate-900"
+          className="mt-1.5 text-xs font-semibold text-[#A0320A] underline decoration-[#F4D4C9] underline-offset-2 transition-colors duration-150 hover:text-[#C13D0D]"
         >
           {isOpen ? "Sembunyikan dasar penilaian" : "Lihat dasar penilaian"}
         </button>
       )}
 
       {isOpen && (
-        <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 rounded-md bg-slate-50 px-3 py-2 text-sm sm:grid-cols-2">
+        <dl className="mt-2.5 grid grid-cols-1 gap-x-4 gap-y-2 rounded-xl border border-[#EFEAE4] bg-[#FAF8F5]/80 px-3.5 py-2.5 text-sm sm:grid-cols-2">
           {row.doi && (
             <div className="sm:col-span-2">
-              <dt className="text-xs text-slate-500">DOI pada naskah</dt>
-              <dd className="break-all text-slate-800">{row.doi}</dd>
+              <dt className="text-xs font-medium text-stone-500">DOI pada naskah</dt>
+              <dd className="break-all font-mono text-xs text-stone-800">{row.doi}</dd>
             </div>
           )}
           {row.match_source && (
             <div>
-              <dt className="text-xs text-slate-500">Sumber pemeriksaan</dt>
-              <dd className="text-slate-800">
+              <dt className="text-xs font-medium text-stone-500">Sumber pemeriksaan</dt>
+              <dd className="text-stone-800">
                 {SOURCE_LABELS[row.match_source] ?? row.match_source}
               </dd>
             </div>
           )}
           {row.match_similarity !== null && row.match_similarity > 0 && (
             <div>
-              <dt className="text-xs text-slate-500">Kemiripan judul</dt>
-              <dd className="text-slate-800 tabular-nums">
+              <dt className="text-xs font-medium text-stone-500">Kemiripan judul</dt>
+              <dd className="text-stone-800 tabular-nums">
                 {Math.round(row.match_similarity * 100)}%
               </dd>
             </div>
           )}
           {row.match_title && (
             <div className="sm:col-span-2">
-              <dt className="text-xs text-slate-500">Judul pada basis data</dt>
-              <dd className="text-slate-800">
+              <dt className="text-xs font-medium text-stone-500">Judul pada basis data</dt>
+              <dd className="text-stone-800">
                 {row.match_title}
                 {row.match_year ? ` (${row.match_year})` : ""}
               </dd>
@@ -197,13 +197,13 @@ function CheckRow({ row }: { row: ReferenceCheckRowData }) {
           )}
           {row.match_url && (
             <div className="sm:col-span-2">
-              <dt className="text-xs text-slate-500">Tautan rujukan</dt>
+              <dt className="text-xs font-medium text-stone-500">Tautan rujukan</dt>
               <dd className="break-all">
                 <a
                   href={row.match_url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+                  className="font-medium text-[#A0320A] underline decoration-[#F4D4C9] underline-offset-2 hover:text-[#C13D0D]"
                 >
                   {row.match_url}
                 </a>
