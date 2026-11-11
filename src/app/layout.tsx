@@ -29,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {children}
         <Script
-          src="/jp-chat-widget.js"
+          src="/jp-chat-widget.js?v=20261111_cartoon"
           data-endpoint="http://localhost:3001/api/widget/chat"
           strategy="lazyOnload"
         />
