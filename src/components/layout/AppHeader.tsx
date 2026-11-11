@@ -25,7 +25,16 @@ export default async function AppHeader() {
     <header className="sticky top-0 z-20 border-b border-[#8C2806]/60 bg-gradient-to-r from-[#B93A0C] via-[#C13D0D] to-[#962D08] shadow-sm">
       <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
         <Link href="/dashboard" className="flex items-center gap-3 rounded-lg transition-opacity duration-150 hover:opacity-90">
-          <span className="h-7 w-1 rounded-full bg-white/90 shadow-xs" aria-hidden="true" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
+            <Image
+              src="/logo-pu.png"
+              alt="Logo PU"
+              width={28}
+              height={28}
+              className="rounded-sm object-contain"
+              priority
+            />
+          </div>
           <div className="leading-tight">
             <p className="text-base font-extrabold tracking-tight text-white uppercase">MQC Assistant</p>
             <p className="text-[11px] font-medium tracking-wide text-white/85">Jurnal Permukiman</p>
