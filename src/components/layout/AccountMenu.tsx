@@ -59,10 +59,16 @@ export default function AccountMenu({ userName, userEmail }: AccountMenuProps) {
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    try {
+      if (process.env.NEXT_PUBLIC_DEV_MODE !== "true") {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+      }
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   return (
