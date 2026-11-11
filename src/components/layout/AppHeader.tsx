@@ -23,24 +23,16 @@ export default async function AppHeader() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-[#8C2806]/60 bg-gradient-to-r from-[#B93A0C] via-[#C13D0D] to-[#962D08] shadow-sm">
-      <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
         <Link href="/dashboard" className="flex items-center gap-3 rounded-lg transition-opacity duration-150 hover:opacity-90">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white p-1 shadow-xs">
-            <Image
-              src="/logo-pu.png"
-              alt="Logo Kementerian Pekerjaan Umum"
-              width={28}
-              height={28}
-              className="rounded-sm object-contain"
-            />
-          </div>
+          <span className="h-7 w-1 rounded-full bg-white/90 shadow-xs" aria-hidden="true" />
           <div className="leading-tight">
-            <p className="text-sm font-bold tracking-tight text-white">MQC Assistant</p>
-            <p className="text-[11px] font-medium text-white/80">Jurnal Permukiman</p>
+            <p className="text-base font-extrabold tracking-tight text-white uppercase">MQC Assistant</p>
+            <p className="text-[11px] font-medium tracking-wide text-white/85">Jurnal Permukiman</p>
           </div>
         </Link>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <a
             href="http://localhost/jurnalpermukiman/index.php/JP"
             target="_blank"
@@ -69,6 +61,17 @@ export default async function AppHeader() {
             </svg>
             <span className="hidden sm:inline">Unggah Naskah</span>
           </Link>
+
+          <div className="hidden sm:flex h-9 items-center rounded-full bg-white px-3 py-1 shadow-sm ring-1 ring-black/10">
+            <Image
+              src="/kemenpu_pill_clean.png"
+              alt="Kementerian Pekerjaan Umum"
+              width={136}
+              height={32}
+              className="h-7 w-auto object-contain"
+              priority
+            />
+          </div>
 
           <AccountMenu userName={userName} userEmail={userEmail} />
         </div>
