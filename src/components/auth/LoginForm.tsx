@@ -33,9 +33,9 @@ export default function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
-      <div>
-        <label htmlFor="email" className="sr-only">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3.5" noValidate>
+      <div className="flex flex-col gap-1">
+        <label htmlFor="email" className="text-xs font-semibold text-stone-600">
           Email
         </label>
         <input
@@ -46,13 +46,13 @@ export default function LoginForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-xl border border-[#DFD9D2] bg-[#FAF8F5] px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
-          placeholder="Email"
+          className="w-full rounded-xl border border-[#DFD9D2] bg-[#FAF8F5] px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
+          placeholder="nama@pu.go.id"
         />
       </div>
 
-      <div>
-        <label htmlFor="password" className="sr-only">
+      <div className="flex flex-col gap-1">
+        <label htmlFor="password" className="text-xs font-semibold text-stone-600">
           Kata Sandi
         </label>
         <input
@@ -63,8 +63,8 @@ export default function LoginForm() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-xl border border-[#DFD9D2] bg-[#FAF8F5] px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
-          placeholder="Kata Sandi"
+          className="w-full rounded-xl border border-[#DFD9D2] bg-[#FAF8F5] px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#C13D0D] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#C13D0D]"
+          placeholder="••••••••"
         />
       </div>
 

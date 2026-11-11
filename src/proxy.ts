@@ -4,6 +4,11 @@ import { NextResponse, type NextRequest } from "next/server";
 const PROTECTED_PATHS = ["/dashboard", "/manuscripts"];
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (process.env.NEXT_PUBLIC_DEV_MODE === "true") {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -31,13 +36,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-  if (process.env.NEXT_PUBLIC_DEV_MODE === "true") {
-    if (pathname === "/login") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-    return response;
-  }
   const isProtected = PROTECTED_PATHS.some((path) => pathname.startsWith(path));
 
   if (!user && isProtected) {

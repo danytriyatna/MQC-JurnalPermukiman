@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { WidgetLoader } from "@/components/WidgetLoader";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -28,11 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <Script
-          src="/jp-chat-widget.js?v=20261111_center"
-          data-endpoint="http://localhost:3001/api/widget/chat"
-          strategy="lazyOnload"
-        />
+        <WidgetLoader />
       </body>
     </html>
   );
