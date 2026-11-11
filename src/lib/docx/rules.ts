@@ -925,13 +925,6 @@ export function runAllChecks(doc: ParsedDocument): FindingDraft[] {
   ];
 }
 
-/**
- * Total number of distinct automated checks this engine currently runs,
- * regardless of how many produced a finding. Used to compute the
- * "X of Y rules passed" summary.
- */
-export const TOTAL_AUTOMATED_RULE_COUNT = 27;
-
 export interface RuleCatalogEntry {
   ruleId: string;
   section: FindingSection;
@@ -1080,3 +1073,10 @@ export const AUTOMATED_RULE_CATALOG: RuleCatalogEntry[] = [
     expectedValue: `${BODY_FONT}, Bold, ${BODY_SIZE_HALF_PT / 2}pt, rata tengah`,
   },
 ];
+
+/**
+ * Total number of distinct automated checks this engine currently runs,
+ * derived dynamically from AUTOMATED_RULE_CATALOG. Used to compute the
+ * "X of Y rules passed" summary.
+ */
+export const TOTAL_AUTOMATED_RULE_COUNT = AUTOMATED_RULE_CATALOG.length;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "@/components/ui/sonner";
+import { WidgetLoader } from "@/components/WidgetLoader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
         {children}
         <Toaster position="bottom-right" richColors />
+        <WidgetLoader />
       </body>
     </html>
   );

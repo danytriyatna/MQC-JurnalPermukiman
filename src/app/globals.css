@@ -103,6 +103,20 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+@layer components {
+  .puskim-canvas {
+    background-color: #F2EFE9;
+    background-image: radial-gradient(#DDD6CC 0.9px, transparent 0.9px);
+    background-size: 18px 18px;
+  }
+
+  .fresh-card {
+    background: #FFFFFF;
+    border: 1px solid #DFD9D2;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 18px rgba(193, 61, 13, 0.045);
+  }
+}
+
 /* Origin-aware popover/dropdown entrance + exit. Enter is handled by
    @starting-style (fires on first paint after mount); exit is handled by
    toggling [data-closing] before the component delays its unmount so the
