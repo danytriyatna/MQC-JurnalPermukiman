@@ -2,7 +2,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import ManuscriptDashboard from "@/components/dashboard/ManuscriptDashboard";
 import { createClient } from "@/lib/supabase/server";
 import { mapManuscriptRow, type ManuscriptRow } from "@/lib/supabase/mappers";
-import { db, manuscripts as manuscriptsTable, users } from "@/db";
+import { db, manuscripts as manuscriptsTable, manuscriptVersions, users } from "@/db";
 import { desc, isNull, eq } from "drizzle-orm";
 import { Manuscript, ManuscriptStatus } from "@/lib/types";
 
@@ -19,6 +19,7 @@ export default async function DashboardPage() {
         id: manuscriptsTable.id,
         title: manuscriptsTable.title,
         originalFileName: manuscriptsTable.originalFileName,
+        activeVersionFileName: manuscriptVersions.originalFileName,
         status: manuscriptsTable.status,
         versionNumber: manuscriptsTable.versionNumber,
         totalRulesChecked: manuscriptsTable.totalRulesChecked,
@@ -32,13 +33,17 @@ export default async function DashboardPage() {
       })
       .from(manuscriptsTable)
       .leftJoin(users, eq(users.id, manuscriptsTable.uploadedBy))
+      .leftJoin(
+        manuscriptVersions,
+        eq(manuscriptVersions.id, manuscriptsTable.currentVersionId),
+      )
       .where(isNull(manuscriptsTable.deletedAt))
       .orderBy(desc(manuscriptsTable.updatedAt));
 
     manuscriptsList = localRows.map((r) => ({
       id: r.id,
       title: r.title,
-      originalFileName: r.originalFileName,
+      originalFileName: r.activeVersionFileName || r.originalFileName,
       uploadedBy: r.authorName || r.uploaderName || "Penulis OJS",
       status: r.status as ManuscriptStatus,
       versionNumber: r.versionNumber,

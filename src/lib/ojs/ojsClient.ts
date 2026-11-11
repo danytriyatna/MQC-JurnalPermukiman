@@ -123,11 +123,19 @@ export async function getAssignedEditorFromOjs(
   const config = getOjsConfig();
 
   if (config.dryRun) {
+    if (process.env.TEST_SIMULATE_UNASSIGNED === "true" || ojsSubmissionId === 9999755) {
+      return {
+        editorName: null,
+        fetchedAt,
+        source: "dry_run",
+        reason: "Simulasi naskah belum ditugaskan editor pada tahap Submission di OJS (dry run)",
+      };
+    }
     return {
-      editorName: null,
+      editorName: "Editor Simulasi (Dry Run)",
       fetchedAt,
       source: "dry_run",
-      reason: "Mode OJS_SYNC_DRY_RUN aktif; lewati panggilan jaringan langsung ke OJS",
+      reason: "Mode OJS_SYNC_DRY_RUN aktif; menggunakan nama editor simulasi",
     };
   }
 

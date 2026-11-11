@@ -535,4 +535,52 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
       await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, CORRUPT_OJS_ID));
     }
   });
+
+  it("strictly gates batch screening when OJS submission has no assigned editor (returns HTTP 422 OJS_EDITOR_UNASSIGNED)", async () => {
+    const UNASSIGNED_OJS_ID = 9999755;
+    await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
+
+    const formData = new FormData();
+    const docxFile = new File([new Uint8Array(sampleDocxBuffer)], "naskah_unassigned.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    formData.append("file", docxFile);
+    formData.append("ojs_submission_id", String(UNASSIGNED_OJS_ID));
+    formData.append("title", "Pengujian Naskah Belum Di-assign Editor OJS");
+    formData.append("author_name", "Penulis Peneliti Mandiri");
+
+    const ingestReq = new NextRequest("http://localhost:3000/api/check-submission", {
+      method: "POST",
+      headers: { "x-mqc-api-key": SECRET_KEY },
+      body: formData,
+    });
+
+    const ingestRes = await POST(ingestReq);
+    assert.equal(ingestRes.status, 200);
+    const ingestBody = await ingestRes.json();
+    const unassignedMsId = ingestBody.manuscriptId;
+
+    try {
+      const screenReq = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          manuscriptIds: [unassignedMsId],
+        }),
+      });
+
+      const screenRes = await batchScreenPOST(screenReq);
+      assert.equal(screenRes.status, 422, "Should return HTTP 422 Unprocessable Entity");
+
+      const screenBody = await screenRes.json();
+      assert.equal(screenBody.success, false);
+      assert.equal(screenBody.code, "OJS_EDITOR_UNASSIGNED");
+      assert.ok(screenBody.details);
+      assert.equal(screenBody.details.ojsSubmissionId, UNASSIGNED_OJS_ID);
+      assert.equal(screenBody.details.title, "Pengujian Naskah Belum Di-assign Editor OJS");
+      assert.equal(screenBody.details.authorName, "Penulis Peneliti Mandiri");
+    } finally {
+      await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
+    }
+  });
 });

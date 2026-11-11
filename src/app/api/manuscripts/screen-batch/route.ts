@@ -6,6 +6,7 @@ import {
   resolveReviewedByForManuscript,
   uploadOrUpdateReportToOjs,
   buildOjsReportFileName,
+  getAssignedEditorFromOjs,
 } from "@/lib/ojs/ojsClient";
 import { buildJobIdempotencyKey } from "@/lib/queue/screeningQueue";
 import { db, manuscripts, manuscriptVersions, screeningRuns, findings, screeningJobs } from "@/db";
@@ -108,6 +109,58 @@ export async function POST(request: NextRequest) {
       }
 
       const manuscript = msRows[0];
+
+      // 1b. Validasi Penugasan Editor di OJS (Strict Gating)
+      // Naskah dari OJS wajib sudah memiliki Editor yang ditugaskan di OJS sebelum pemeriksaan MQC dijalankan
+      if (typeof manuscript.ojsSubmissionId === "number" && manuscript.ojsSubmissionId > 0) {
+        let assignedEditor = manuscript.assignedEditorName;
+        if (!assignedEditor || assignedEditor.trim().length === 0) {
+          const lookup = await getAssignedEditorFromOjs(manuscript.ojsSubmissionId);
+          if (lookup.editorName) {
+            assignedEditor = lookup.editorName;
+            try {
+              await db
+                .update(manuscripts)
+                .set({
+                  assignedEditorName: lookup.editorName,
+                  assignedEditorFetchedAt: lookup.fetchedAt,
+                })
+                .where(eq(manuscripts.id, manuscriptId));
+            } catch {
+              // Abaikan kegagalan cache update minor
+            }
+          }
+        }
+
+        if (!assignedEditor || assignedEditor.trim().length === 0) {
+          const unassignedDetails = {
+            ojsSubmissionId: manuscript.ojsSubmissionId,
+            title: manuscript.title,
+            authorName: manuscript.authorName || "Penulis OJS",
+          };
+
+          if (manuscriptIds.length === 1) {
+            return NextResponse.json(
+              {
+                success: false,
+                code: "OJS_EDITOR_UNASSIGNED",
+                error: "Naskah belum ditugaskan ke Editor di OJS.",
+                details: unassignedDetails,
+              },
+              { status: 422, headers: corsHeaders },
+            );
+          }
+
+          results.push({
+            manuscriptId,
+            success: false,
+            code: "OJS_EDITOR_UNASSIGNED",
+            error: "Naskah belum ditugaskan ke Editor di OJS.",
+            unassignedDetails,
+          } as any);
+          continue;
+        }
+      }
 
       // 2. Ambil versi aktif naskah
       let versionRow = null;

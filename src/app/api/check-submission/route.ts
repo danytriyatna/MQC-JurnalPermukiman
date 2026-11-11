@@ -252,6 +252,7 @@ export async function POST(request: NextRequest) {
           .update(manuscripts)
           .set({
             title: customTitle || existingManuscript.title,
+            originalFileName,
             status: "pending",
             versionNumber,
             currentVersionId: newVersion.id,
@@ -334,8 +335,9 @@ export async function POST(request: NextRequest) {
     jobId = queued.jobId;
 
     // Trigger pemrosesan antrean secara asinkron (non-blocking) dengan Single-Flight Coalescing Lock.
-    // Meski 50 request masuk serentak, hanya 1 pool worker yang berjalan tanpa memicu thundering herd.
-    if (process.env.AUTO_DRAIN_ON_INGEST !== "false") {
+    // Safe by Default: Naskah dari OJS selalu masuk antrean pending menunggu komando Redaksi.
+    // Hanya dikuras otomatis jika AUTO_DRAIN_ON_INGEST secara eksplisit diaktifkan ("true").
+    if (process.env.AUTO_DRAIN_ON_INGEST === "true") {
       setTimeout(() => {
         void triggerBackgroundDrain({ concurrency: 4 });
       }, 5);

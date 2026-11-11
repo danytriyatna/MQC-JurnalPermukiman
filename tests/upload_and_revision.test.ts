@@ -7,6 +7,9 @@ import { Document, Packer, Paragraph, TextRun } from "docx";
 import { POST as createManuscriptPOST } from "../src/app/api/manuscripts/route";
 import { POST as createRevisionPOST } from "../src/app/api/manuscripts/[id]/revisions/route";
 import { GET as getVersionsGET } from "../src/app/api/manuscripts/[id]/versions/route";
+import { GET as getVersionDetailGET } from "../src/app/api/manuscripts/[id]/versions/[versionId]/route";
+import { GET as downloadVersionGET } from "../src/app/api/manuscripts/[id]/versions/[versionId]/download/route";
+import { GET as reportVersionGET } from "../src/app/api/manuscripts/[id]/versions/[versionId]/report/route";
 import { db, manuscripts, manuscriptVersions, screeningRuns, findings, client } from "../src/db";
 import { eq } from "drizzle-orm";
 import { getStorageDir } from "../src/lib/storage/localStorage";
@@ -161,6 +164,80 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
     assert.equal(body.data.length, 2);
     assert.equal(body.data[0].version_number, 2, "Versi terbaru (2) harus berada di urutan pertama");
     assert.equal(body.data[1].version_number, 1);
+  });
+
+  it("GET /api/manuscripts/[id]/versions/[versionId] returns specific version analysis detail", async () => {
+    assert.ok(createdManuscriptId);
+
+    // Ambil daftar versi untuk mendapatkan versionId v2
+    const allVersions = await db
+      .select()
+      .from(manuscriptVersions)
+      .where(eq(manuscriptVersions.manuscriptId, createdManuscriptId));
+    const v2 = allVersions.find((v) => v.versionNumber === 2)!;
+    assert.ok(v2);
+
+    const req = new NextRequest(
+      `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions/${v2.id}`,
+    );
+    const res = await getVersionDetailGET(req, {
+      params: Promise.resolve({ id: createdManuscriptId, versionId: v2.id }),
+    });
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.equal(body.data.version.versionNumber, 2);
+    assert.ok(Array.isArray(body.data.findings));
+  });
+
+  it("GET /api/manuscripts/[id]/versions/[versionId]/download downloads version physical docx file", async () => {
+    assert.ok(createdManuscriptId);
+
+    const allVersions = await db
+      .select()
+      .from(manuscriptVersions)
+      .where(eq(manuscriptVersions.manuscriptId, createdManuscriptId));
+    const v2 = allVersions.find((v) => v.versionNumber === 2)!;
+    assert.ok(v2);
+
+    const req = new NextRequest(
+      `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions/${v2.id}/download`,
+    );
+    const res = await downloadVersionGET(req, {
+      params: Promise.resolve({ id: createdManuscriptId, versionId: v2.id }),
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-disposition")?.includes("attachment"));
+    assert.equal(
+      res.headers.get("content-type"),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+  });
+
+  it("GET /api/manuscripts/[id]/versions/[versionId]/report generates and downloads version evaluation DOCX report", async () => {
+    assert.ok(createdManuscriptId);
+
+    const allVersions = await db
+      .select()
+      .from(manuscriptVersions)
+      .where(eq(manuscriptVersions.manuscriptId, createdManuscriptId));
+    const v2 = allVersions.find((v) => v.versionNumber === 2)!;
+    assert.ok(v2);
+
+    const req = new NextRequest(
+      `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions/${v2.id}/report`,
+    );
+    const res = await reportVersionGET(req, {
+      params: Promise.resolve({ id: createdManuscriptId, versionId: v2.id }),
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-disposition")?.includes("attachment"));
+    assert.ok(res.headers.get("content-disposition")?.includes("Laporan-review-"));
+    assert.equal(
+      res.headers.get("content-type"),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
   });
 
   it("handles validation edge cases: missing file, non-docx, and invalid manuscript ID", async () => {

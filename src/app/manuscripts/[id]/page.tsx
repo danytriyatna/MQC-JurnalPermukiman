@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +41,8 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
 
   // 1. Coba ambil data dari basis data lokal PostgreSQL (mqc_db) via Drizzle ORM
   let manuscript: any = null;
+  let currentVersionFileName: string | null = null;
+  let currentVersionUploadedAt: Date | null = null;
   let parseErrorMessage: string | null = null;
   let findings: FindingRowData[] = [];
   let referenceRun: ReferenceRunData | null = null;
@@ -85,6 +88,8 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
 
         if (versionRows.length > 0) {
           const currentVer = versionRows[0];
+          currentVersionFileName = currentVer.originalFileName;
+          currentVersionUploadedAt = currentVer.uploadedAt;
           parseErrorMessage = currentVer.parseErrorMessage;
 
           // Ambil screening run terbaru
@@ -281,16 +286,24 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        <Link href="/dashboard" className="text-sm text-slate-500 transition-colors duration-150 hover:text-slate-700">
-          &larr; Kembali ke Riwayat Naskah
-        </Link>
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="-ml-3 h-8 gap-1.5 text-slate-500 hover:text-slate-900"
+        >
+          <Link href="/dashboard">
+            <ArrowLeft className="h-4 w-4" />
+            Kembali ke Riwayat Naskah
+          </Link>
+        </Button>
 
         <div className="mt-3 mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">{manuscript.title}</h1>
             <p className="mt-0.5 text-sm text-slate-500">
-              {manuscript.original_file_name} · versi {manuscript.version_number} · diunggah oleh{" "}
-              {uploaderDisplayName} · {formatDateID(manuscript.updated_at instanceof Date ? manuscript.updated_at.toISOString() : manuscript.updated_at)}
+              {currentVersionFileName || manuscript.original_file_name} · versi {manuscript.version_number} (Aktif) · diunggah oleh{" "}
+              {uploaderDisplayName} · {formatDateID(currentVersionUploadedAt ? currentVersionUploadedAt.toISOString() : (manuscript.updated_at instanceof Date ? manuscript.updated_at.toISOString() : manuscript.updated_at))}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -299,18 +312,20 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
               <>
                 <DownloadActionButton
                   href={`/api/manuscripts/${manuscript.id}/original${tokenQuery}`}
-                  defaultFilename={manuscript.original_file_name || "naskah-asli.docx"}
+                  defaultFilename={currentVersionFileName || manuscript.original_file_name || "naskah-asli.docx"}
                   label="File Asli"
                   loadingLabel="Mengunduh…"
                   iconType="original"
                 />
-                <DownloadActionButton
-                  href={`/api/manuscripts/${manuscript.id}/report${tokenQuery}`}
-                  defaultFilename={`Laporan - ${manuscript.title || "naskah"}.docx`}
-                  label="Ekspor Laporan"
-                  loadingLabel="Menyiapkan…"
-                  iconType="report"
-                />
+                {status !== "pending" && status !== "processing_failed" && (
+                  <DownloadActionButton
+                    href={`/api/manuscripts/${manuscript.id}/report${tokenQuery}`}
+                    defaultFilename={`Laporan - ${manuscript.title || "naskah"}.docx`}
+                    label="Ekspor Laporan"
+                    loadingLabel="Menyiapkan…"
+                    iconType="report"
+                  />
+                )}
               </>
             )}
             <DeleteManuscriptButton manuscriptId={manuscript.id} />
@@ -323,11 +338,19 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
               <span className="text-2xl">📋</span>
               <div>
                 <h3 className="font-semibold text-blue-950">Menunggu Pemeriksaan Redaksi</h3>
-                <p className="mt-1 text-blue-800">
-                  Naskah ini telah berhasil diterima dan saat ini berada di dalam antrean tugas pemeriksaan Tim Redaksi Jurnal Permukiman. Hasil penapisan format dan verifikasi referensi akan ditampilkan di sini setelah redaksi menjalankan pemeriksaan.
+                <p className="mt-1 text-blue-800 leading-relaxed">
+                  Naskah versi {manuscript.version_number}{" "}
+                  {currentVersionFileName ? (
+                    <span className="font-medium text-blue-950">({currentVersionFileName})</span>
+                  ) : null}{" "}
+                  telah berhasil diterima dan saat ini berada di dalam antrean tugas pemeriksaan Tim Redaksi Jurnal Permukiman. Hasil penapisan format dan verifikasi referensi akan ditampilkan di sini setelah redaksi menjalankan pemeriksaan.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <ScreenNowPendingButton manuscriptId={manuscript.id} />
+                  <ScreenNowPendingButton
+                    manuscriptId={manuscript.id}
+                    versionNumber={manuscript.version_number}
+                    originalFileName={currentVersionFileName || manuscript.original_file_name}
+                  />
                   <Button asChild variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50">
                     <Link href="/dashboard">
                       Buka Antrean di Dashboard &rarr;
@@ -377,7 +400,11 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
 
         <div className="mt-5 flex flex-col gap-4">
           <RevisionUploadSection manuscriptId={manuscript.id} />
-          <VersionHistoryList versions={versions} />
+          <VersionHistoryList
+            versions={versions}
+            manuscriptId={manuscript.id}
+            currentVersionId={manuscript.current_version_id}
+          />
         </div>
       </main>
     </div>
