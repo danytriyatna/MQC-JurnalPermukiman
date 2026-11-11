@@ -124,7 +124,15 @@ export default async function DashboardPage() {
               rel="noopener noreferrer"
               className="font-medium text-[#A0320A] transition-colors hover:underline"
             >
-              Portal OJS Jurnal Permukiman ↗
+              Portal OJS ↗
+            </a>
+            <a
+              href="http://localhost:3001"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-stone-600 transition-colors hover:text-[#0F2C59]"
+            >
+              JP-Insight ↗
             </a>
             <Link href="/manuscripts/upload" className="font-medium text-stone-600 transition-colors hover:text-[#A0320A]">
               Unggah Naskah

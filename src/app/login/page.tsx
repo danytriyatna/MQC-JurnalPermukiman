@@ -23,15 +23,20 @@ export default async function LoginPage() {
         <div className="fresh-card grid w-full max-w-4xl overflow-hidden rounded-3xl md:grid-cols-12">
           <div className="flex flex-col justify-between bg-gradient-to-br from-[#B93A0C] via-[#C13D0D] to-[#8C2806] p-8 text-white md:col-span-5 sm:p-10">
             <div>
-              <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-2 shadow-md">
-                <Image
-                  src="/logo-pu.png"
-                  alt="Logo Kementerian Pekerjaan Umum"
-                  width={44}
-                  height={44}
-                  className="object-contain"
-                  priority
-                />
+              <div className="flex items-center gap-3">
+                <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-2 shadow-md">
+                  <Image
+                    src="/logo-pu.png"
+                    alt="Logo Kementerian Pekerjaan Umum"
+                    width={44}
+                    height={44}
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+                <span className="rounded-full border border-white/30 bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                  Audit &amp; Mutu
+                </span>
               </div>
               <p className="mt-5 text-xs font-bold uppercase tracking-widest text-white/75">
                 Ekosistem Jurnal Permukiman
@@ -43,6 +48,20 @@ export default async function LoginPage() {
                 Sistem pemeriksaan otomatis kesesuaian template, struktur naskah, dan validasi
                 referensi untuk redaksi dan penulis Jurnal Permukiman.
               </p>
+              <ul className="mt-4 space-y-1.5 text-xs text-white/90">
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
+                  <span>Cek format &amp; template naskah</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
+                  <span>Validasi daftar pustaka</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
+                  <span>Laporan kepatuhan siap audit</span>
+                </li>
+              </ul>
             </div>
 
             <div className="mt-8 border-t border-white/20 pt-4 text-xs text-white/80">
