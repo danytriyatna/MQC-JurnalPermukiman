@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BouncedLoader } from "@/components/ui/bounced-loader";
 import { Card, CardContent } from "@/components/ui/card";
-import UnassignedEditorModal, { UnassignedEditorDetails } from "@/components/manuscripts/UnassignedEditorModal";
 
 const AVATAR_PALETTE = [
   "bg-indigo-100 text-indigo-700",
@@ -66,8 +65,6 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
     type: "success" | "error" | "warning";
     message: string;
   } | null>(null);
-  const [unassignedDetails, setUnassignedDetails] = useState<UnassignedEditorDetails | null>(null);
-  const [isUnassignedModalOpen, setIsUnassignedModalOpen] = useState(false);
 
   // Filter groups
   const allPending = useMemo(() => manuscripts.filter((m) => m.status === "pending"), [manuscripts]);
@@ -166,21 +163,8 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
 
       const data = await res.json();
 
-      if (res.status === 422 && data.code === "OJS_EDITOR_UNASSIGNED") {
-        setUnassignedDetails(data.details);
-        setIsUnassignedModalOpen(true);
-        setIsProcessing(false);
-        return;
-      }
-
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal menjalankan penapisan naskah.");
-      }
-
-      const unassignedResult = data.results?.find((r: any) => r.code === "OJS_EDITOR_UNASSIGNED");
-      if (unassignedResult?.unassignedDetails) {
-        setUnassignedDetails(unassignedResult.unassignedDetails);
-        setIsUnassignedModalOpen(true);
       }
 
       const processed = Number(data.processedCount || 0);
@@ -563,12 +547,6 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
           )}
         </>
       )}
-
-      <UnassignedEditorModal
-        isOpen={isUnassignedModalOpen}
-        onClose={() => setIsUnassignedModalOpen(false)}
-        details={unassignedDetails}
-      />
     </div>
   );
 }

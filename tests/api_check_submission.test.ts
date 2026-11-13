@@ -536,7 +536,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     }
   });
 
-  it("strictly gates batch screening when OJS submission has no assigned editor (returns HTTP 422 OJS_EDITOR_UNASSIGNED)", async () => {
+  it("successfully screens batch when OJS submission has no assigned editor (non-blocking fallback to '-')", async () => {
     const UNASSIGNED_OJS_ID = 9999755;
     await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
 
@@ -570,15 +570,15 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
       });
 
       const screenRes = await batchScreenPOST(screenReq);
-      assert.equal(screenRes.status, 422, "Should return HTTP 422 Unprocessable Entity");
+      assert.equal(screenRes.status, 200, "Should return HTTP 200 OK");
 
       const screenBody = await screenRes.json();
-      assert.equal(screenBody.success, false);
-      assert.equal(screenBody.code, "OJS_EDITOR_UNASSIGNED");
-      assert.ok(screenBody.details);
-      assert.equal(screenBody.details.ojsSubmissionId, UNASSIGNED_OJS_ID);
-      assert.equal(screenBody.details.title, "Pengujian Naskah Belum Di-assign Editor OJS");
-      assert.equal(screenBody.details.authorName, "Penulis Peneliti Mandiri");
+      assert.equal(screenBody.success, true);
+      assert.equal(screenBody.processedCount, 1);
+
+      const msInDb = await db.select().from(manuscripts).where(eq(manuscripts.id, unassignedMsId)).limit(1);
+      assert.ok(msInDb.length > 0);
+      assert.ok(msInDb[0].status === "passed" || msInDb[0].status === "needs_revision");
     } finally {
       await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
     }

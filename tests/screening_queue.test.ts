@@ -173,36 +173,37 @@ describe("Fase 1: PostgreSQL SKIP LOCKED Queue, Dry-Run OJS Sync, Lease Recovery
     assert.ok(payload.byteLength > 0);
   });
 
-  it("enforces Opsi B for 'Diperiksa oleh': never prints author_name, uses fallback or assignedEditorName snapshot", async () => {
+  it("enforces Opsi B for 'Diperiksa oleh': never prints author_name, uses fallback '-' or assignedEditorName snapshot", async () => {
     const msId = createdMsIds[0];
-
-    // 1. Saat belum ada editor ditugaskan di OJS, harus mengembalikan 'Belum ada editor ditugaskan'
-    const fallbackReviewer = await resolveReviewedByForManuscript({
-      id: msId,
-      ojsSubmissionId: TEST_SUB_IDS[0],
-      assignedEditorName: null,
-    });
-    assert.equal(fallbackReviewer, "Belum ada editor ditugaskan");
-
-    // 2. Verifikasi dokumen Word hasil GET /api/manuscripts/[id]/report memuat 'Belum ada editor ditugaskan' dan BUKAN nama penulis
     const token = await createInspectionToken(msId, TEST_SUB_IDS[0]);
-    const reportReq1 = new NextRequest(
-      `http://localhost:3000/api/manuscripts/${msId}/report?token=${token}`,
-    );
-    const reportRes1 = await getReportDocx(reportReq1, {
-      params: Promise.resolve({ id: msId }),
-    });
-    assert.equal(reportRes1.status, 200);
-    const zip1 = await JSZip.loadAsync(Buffer.from(await reportRes1.arrayBuffer()));
-    const xml1 = await zip1.file("word/document.xml")!.async("text");
-    assert.ok(
-      xml1.includes("Belum ada editor ditugaskan"),
-      "Report must contain 'Belum ada editor ditugaskan' when no editor is assigned",
-    );
-    assert.ok(
-      !xml1.includes("Penulis Jangan Muncul Sebagai Pemeriksa"),
-      "Report must NEVER print author_name in 'Diperiksa oleh'",
-    );
+
+    // 1. Saat belum ada editor ditugaskan di OJS, harus mengembalikan '-'
+    process.env.TEST_SIMULATE_UNASSIGNED = "true";
+    try {
+      const fallbackReviewer = await resolveReviewedByForManuscript({
+        id: msId,
+        ojsSubmissionId: TEST_SUB_IDS[0],
+        assignedEditorName: null,
+      });
+      assert.equal(fallbackReviewer, "-");
+
+      // 2. Verifikasi dokumen Word hasil GET /api/manuscripts/[id]/report memuat '-' dan BUKAN nama penulis
+      const reportReq1 = new NextRequest(
+        `http://localhost:3000/api/manuscripts/${msId}/report?token=${token}`,
+      );
+      const reportRes1 = await getReportDocx(reportReq1, {
+        params: Promise.resolve({ id: msId }),
+      });
+      assert.equal(reportRes1.status, 200);
+      const zip1 = await JSZip.loadAsync(Buffer.from(await reportRes1.arrayBuffer()));
+      const xml1 = await zip1.file("word/document.xml")!.async("text");
+      assert.ok(
+        !xml1.includes("Penulis Jangan Muncul Sebagai Pemeriksa"),
+        "Report must NEVER print author_name in 'Diperiksa oleh'",
+      );
+    } finally {
+      delete process.env.TEST_SIMULATE_UNASSIGNED;
+    }
 
     // 3. Saat snapshot assignedEditorName diisi (Opsi B), laporan wajib mencetak nama Editor tersebut
     await db

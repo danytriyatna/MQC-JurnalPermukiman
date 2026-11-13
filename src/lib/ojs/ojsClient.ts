@@ -267,7 +267,7 @@ export async function resolveReviewedByForManuscript(manuscript: {
     }
   }
 
-  return "Belum ada editor ditugaskan";
+  return "-";
 }
 
 /**

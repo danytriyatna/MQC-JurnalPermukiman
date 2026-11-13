@@ -110,15 +110,15 @@ export async function POST(request: NextRequest) {
 
       const manuscript = msRows[0];
 
-      // 1b. Validasi Penugasan Editor di OJS (Strict Gating)
-      // Naskah dari OJS wajib sudah memiliki Editor yang ditugaskan di OJS sebelum pemeriksaan MQC dijalankan
+      // 1b. Resolusi Penugasan Editor di OJS (Non-blocking)
+      // Jika ada editor yang ditugaskan di OJS, simpan ke database untuk laporan Word.
+      // Jika belum ada editor, pemeriksaan tetap dilanjutkan dan nama editor diisi "-" pada laporan.
       if (typeof manuscript.ojsSubmissionId === "number" && manuscript.ojsSubmissionId > 0) {
-        let assignedEditor = manuscript.assignedEditorName;
+        const assignedEditor = manuscript.assignedEditorName;
         if (!assignedEditor || assignedEditor.trim().length === 0) {
-          const lookup = await getAssignedEditorFromOjs(manuscript.ojsSubmissionId);
-          if (lookup.editorName) {
-            assignedEditor = lookup.editorName;
-            try {
+          try {
+            const lookup = await getAssignedEditorFromOjs(manuscript.ojsSubmissionId);
+            if (lookup.editorName) {
               await db
                 .update(manuscripts)
                 .set({
@@ -126,39 +126,10 @@ export async function POST(request: NextRequest) {
                   assignedEditorFetchedAt: lookup.fetchedAt,
                 })
                 .where(eq(manuscripts.id, manuscriptId));
-            } catch {
-              // Abaikan kegagalan cache update minor
             }
+          } catch {
+            // Abaikan kegagalan lookup/cache editor OJS, proses screening tetap berjalan
           }
-        }
-
-        if (!assignedEditor || assignedEditor.trim().length === 0) {
-          const unassignedDetails = {
-            ojsSubmissionId: manuscript.ojsSubmissionId,
-            title: manuscript.title,
-            authorName: manuscript.authorName || "Penulis OJS",
-          };
-
-          if (manuscriptIds.length === 1) {
-            return NextResponse.json(
-              {
-                success: false,
-                code: "OJS_EDITOR_UNASSIGNED",
-                error: "Naskah belum ditugaskan ke Editor di OJS.",
-                details: unassignedDetails,
-              },
-              { status: 422, headers: corsHeaders },
-            );
-          }
-
-          results.push({
-            manuscriptId,
-            success: false,
-            code: "OJS_EDITOR_UNASSIGNED",
-            error: "Naskah belum ditugaskan ke Editor di OJS.",
-            unassignedDetails,
-          } as any);
-          continue;
         }
       }
 
