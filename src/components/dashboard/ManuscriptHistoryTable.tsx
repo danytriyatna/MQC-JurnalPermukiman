@@ -93,12 +93,12 @@ export default function ManuscriptHistoryTable({ manuscripts }: { manuscripts: M
                 <td className="max-w-[260px] xl:max-w-[340px] 2xl:max-w-[560px] px-4 py-3.5">
                   <a
                     href={`/manuscripts/${manuscript.id}`}
-                    className="block truncate text-sm font-semibold text-stone-900 transition-colors duration-150 group-hover:text-[#A0320A] hover:underline"
+                    className="font-serif block text-[15px] font-bold leading-[1.35] text-stone-900 transition-colors duration-150 group-hover:text-[#A0320A] hover:underline line-clamp-2"
                     title={manuscript.title}
                   >
                     {manuscript.title}
                   </a>
-                  <p className="mt-0.5 truncate text-xs text-stone-500">
+                  <p className="mt-1 truncate text-xs leading-[1.45] text-stone-500">
                     {manuscript.originalFileName} · v{manuscript.versionNumber}
                   </p>
                 </td>
