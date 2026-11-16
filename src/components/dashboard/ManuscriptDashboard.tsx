@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BouncedLoader } from "@/components/ui/bounced-loader";
 import { Card, CardContent } from "@/components/ui/card";
+import UnassignedEditorModal, { UnassignedEditorDetails } from "@/components/manuscripts/UnassignedEditorModal";
 
 const AVATAR_PALETTE = [
   "bg-indigo-100 text-indigo-700",
@@ -65,6 +66,8 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
     type: "success" | "error" | "warning";
     message: string;
   } | null>(null);
+  const [unassignedDetails, setUnassignedDetails] = useState<UnassignedEditorDetails | null>(null);
+  const [isUnassignedModalOpen, setIsUnassignedModalOpen] = useState(false);
 
   // Filter groups
   const allPending = useMemo(() => manuscripts.filter((m) => m.status === "pending"), [manuscripts]);
@@ -163,8 +166,29 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
 
       const data = await res.json();
 
+      if (res.status === 422 && data.code === "OJS_EDITOR_UNASSIGNED") {
+        setUnassignedDetails(data.details);
+        setIsUnassignedModalOpen(true);
+        return;
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal menjalankan penapisan naskah.");
+      }
+
+      const batchResults: Array<{
+        manuscriptId: string;
+        success: boolean;
+        code?: string;
+        error?: string;
+        unassignedDetails?: UnassignedEditorDetails;
+      }> = Array.isArray(data.results) ? data.results : [];
+      const unassignedResult = batchResults.find((r) => r.code === "OJS_EDITOR_UNASSIGNED");
+      const ojsBusyResult = batchResults.find((r) => r.code === "OJS_UNAVAILABLE");
+
+      if (unassignedResult?.unassignedDetails) {
+        setUnassignedDetails(unassignedResult.unassignedDetails);
+        setIsUnassignedModalOpen(true);
       }
 
       const processed = Number(data.processedCount || 0);
@@ -173,22 +197,33 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
         setNotification({ type: "success", message: msg });
         toast.success(msg);
       } else if (processed > 0) {
-        const msg = `Pemeriksaan selesai sebagian: ${processed} berhasil, ${ids.length - processed} gagal diproses.`;
+        const baseMsg = `Pemeriksaan selesai sebagian: ${processed} berhasil, ${ids.length - processed} tidak diproses.`;
+        const msg = ojsBusyResult?.error ? `${baseMsg} ${ojsBusyResult.error}` : baseMsg;
         setNotification({ type: "warning", message: msg });
         toast.warning(msg);
+      } else if (ojsBusyResult?.error) {
+        setNotification({ type: "error", message: ojsBusyResult.error });
+        toast.error(ojsBusyResult.error);
+      } else if (unassignedResult) {
+        const msg = "Naskah belum di-assign ke Editor di OJS. Silakan tugaskan Editor di OJS terlebih dahulu.";
+        setNotification({ type: "warning", message: msg });
       } else {
         const msg = `Gagal memproses naskah yang dipilih (${ids.length} naskah gagal).`;
         setNotification({ type: "error", message: msg });
         toast.error(msg);
       }
 
-      // Clear selection of processed items
-      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      // Hanya hapus centang untuk naskah yang berhasil diproses
+      const succeededIds = new Set(
+        batchResults.filter((r) => r.success).map((r) => r.manuscriptId),
+      );
+      setSelectedIds((prev) => prev.filter((id) => !succeededIds.has(id)));
 
-      // Trigger server re-render
-      startTransition(() => {
-        router.refresh();
-      });
+      if (processed > 0) {
+        startTransition(() => {
+          router.refresh();
+        });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Terjadi kesalahan internal saat menghubungi server penapisan.";
       setNotification({ type: "error", message: msg });
@@ -547,6 +582,12 @@ export default function ManuscriptDashboard({ manuscripts }: { manuscripts: Manu
           )}
         </>
       )}
+
+      <UnassignedEditorModal
+        isOpen={isUnassignedModalOpen}
+        onClose={() => setIsUnassignedModalOpen(false)}
+        details={unassignedDetails}
+      />
     </div>
   );
 }

@@ -232,6 +232,96 @@ export async function getAssignedEditorFromOjs(
   }
 }
 
+export const OJS_BUSY_ERROR_MESSAGE =
+  "OJS sedang sibuk. Silakan coba kembali beberapa saat lagi.";
+
+export type EnsureAssignedEditorResult =
+  | {
+      ok: true;
+      assignedEditorName: string | null;
+      assignedEditorFetchedAt: Date | string | null;
+    }
+  | {
+      ok: false;
+      code: "OJS_EDITOR_UNASSIGNED" | "OJS_UNAVAILABLE";
+      httpStatus: 422 | 503;
+      error: string;
+      reason?: string;
+    };
+
+async function cacheAssignedEditorName(
+  manuscriptId: string,
+  editorName: string,
+  fetchedAt: Date,
+): Promise<void> {
+  try {
+    await db
+      .update(manuscripts)
+      .set({
+        assignedEditorName: editorName,
+        assignedEditorFetchedAt: fetchedAt,
+      })
+      .where(eq(manuscripts.id, manuscriptId));
+  } catch {
+    // Kegagalan menyimpan cache snapshot tidak boleh menggagalkan pembuatan laporan
+  }
+}
+
+/**
+ * Memastikan naskah asal OJS telah memiliki Editor yang ditugaskan sebelum screening dijalankan.
+ * Membedakan kegagalan koneksi/konfigurasi OJS (`OJS_UNAVAILABLE`) dari Editor belum di-assign (`OJS_EDITOR_UNASSIGNED`).
+ */
+export async function ensureAssignedEditorForScreening(manuscript: {
+  id: string;
+  ojsSubmissionId?: number | null;
+  assignedEditorName?: string | null;
+  assignedEditorFetchedAt?: Date | string | null;
+}): Promise<EnsureAssignedEditorResult> {
+  if (!manuscript.ojsSubmissionId || manuscript.ojsSubmissionId <= 0) {
+    return {
+      ok: true,
+      assignedEditorName: manuscript.assignedEditorName?.trim() || null,
+      assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt ?? null,
+    };
+  }
+
+  if (manuscript.assignedEditorName && manuscript.assignedEditorName.trim().length > 0) {
+    return {
+      ok: true,
+      assignedEditorName: manuscript.assignedEditorName.trim(),
+      assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt ?? null,
+    };
+  }
+
+  const lookup = await getAssignedEditorFromOjs(manuscript.ojsSubmissionId);
+  if (lookup.editorName) {
+    await cacheAssignedEditorName(manuscript.id, lookup.editorName, lookup.fetchedAt);
+    return {
+      ok: true,
+      assignedEditorName: lookup.editorName,
+      assignedEditorFetchedAt: lookup.fetchedAt,
+    };
+  }
+
+  if (lookup.source === "fallback") {
+    return {
+      ok: false,
+      code: "OJS_UNAVAILABLE",
+      httpStatus: 503,
+      error: OJS_BUSY_ERROR_MESSAGE,
+      reason: lookup.reason,
+    };
+  }
+
+  return {
+    ok: false,
+    code: "OJS_EDITOR_UNASSIGNED",
+    httpStatus: 422,
+    error: "Naskah belum ditugaskan ke Editor di OJS.",
+    reason: lookup.reason,
+  };
+}
+
 /**
  * Menentukan teks kolom "Diperiksa oleh" sesuai Opsi B:
  * 1. Gunakan snapshot assignedEditorName di database jika sudah ada.
@@ -252,22 +342,12 @@ export async function resolveReviewedByForManuscript(manuscript: {
   if (manuscript.ojsSubmissionId) {
     const lookup = await getAssignedEditorFromOjs(manuscript.ojsSubmissionId);
     if (lookup.editorName) {
-      try {
-        await db
-          .update(manuscripts)
-          .set({
-            assignedEditorName: lookup.editorName,
-            assignedEditorFetchedAt: lookup.fetchedAt,
-          })
-          .where(eq(manuscripts.id, manuscript.id));
-      } catch {
-        // Kegagalan menyimpan cache snapshot tidak boleh menggagalkan pembuatan laporan
-      }
+      await cacheAssignedEditorName(manuscript.id, lookup.editorName, lookup.fetchedAt);
       return lookup.editorName;
     }
   }
 
-  return "-";
+  return "Belum ada editor ditugaskan";
 }
 
 /**

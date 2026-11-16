@@ -8,6 +8,7 @@ import {
   uploadOrUpdateReportToOjs,
   buildOjsReportFileName,
   getOjsConfig,
+  ensureAssignedEditorForScreening,
 } from "@/lib/ojs/ojsClient";
 import { ManuscriptStatus } from "@/lib/types";
 
@@ -290,6 +291,17 @@ export async function executeClaimedScreeningJob(
       throw new Error("Versi berkas naskah tidak ditemukan di database.");
     }
 
+    // 0. Validasi Penugasan Editor di OJS (Strict Gating sebelum screening dijalankan)
+    const editorGate = await ensureAssignedEditorForScreening({
+      id: manuscript.id,
+      ojsSubmissionId: manuscript.ojsSubmissionId,
+      assignedEditorName: manuscript.assignedEditorName,
+      assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt,
+    });
+    if (!editorGate.ok) {
+      throw new Error(editorGate.error);
+    }
+
     // 1. Baca berkas fisik .docx
     const docxBuffer = await readManuscriptFile(versionRow.fileStoragePath);
 
@@ -416,12 +428,13 @@ export async function executeClaimedScreeningJob(
         .where(eq(manuscripts.id, manuscript.id));
     });
 
-    // 4. Resolusi nama Editor OJS (Opsi B dengan degradasi halus)
+    // 4. Resolusi nama Editor OJS (Opsi B dengan fallback aman)
     const reviewedBy = await resolveReviewedByForManuscript({
       id: manuscript.id,
       ojsSubmissionId: manuscript.ojsSubmissionId,
-      assignedEditorName: manuscript.assignedEditorName,
-      assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt,
+      assignedEditorName: editorGate.assignedEditorName ?? manuscript.assignedEditorName,
+      assignedEditorFetchedAt:
+        editorGate.assignedEditorFetchedAt ?? manuscript.assignedEditorFetchedAt,
     });
 
     // 5. Buat berkas Laporan Pemeriksaan Kualitas (.docx)

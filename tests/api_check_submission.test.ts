@@ -12,6 +12,7 @@ import { createInspectionToken } from "../src/lib/auth/token";
 import { db, manuscripts, manuscriptVersions, screeningRuns, client } from "../src/db";
 import { eq } from "drizzle-orm";
 import { getStorageDir } from "../src/lib/storage/localStorage";
+import { resetOjsCircuitBreaker } from "../src/lib/ojs/ojsClient";
 import { createStaffSessionCookieHeader } from "./helpers/authTestHelper";
 
 describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening Queue Test", () => {
@@ -551,7 +552,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     }
   });
 
-  it("successfully screens batch when OJS submission has no assigned editor (non-blocking fallback to '-')", async () => {
+  it("strictly gates batch screening when OJS submission has no assigned editor (returns HTTP 422 OJS_EDITOR_UNASSIGNED)", async () => {
     const UNASSIGNED_OJS_ID = 9999755;
     await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
 
@@ -585,16 +586,145 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
       });
 
       const screenRes = await batchScreenPOST(screenReq);
-      assert.equal(screenRes.status, 200, "Should return HTTP 200 OK");
+      assert.equal(screenRes.status, 422, "Should return HTTP 422 Unprocessable Entity");
 
       const screenBody = await screenRes.json();
-      assert.equal(screenBody.success, true);
-      assert.equal(screenBody.processedCount, 1);
+      assert.equal(screenBody.success, false);
+      assert.equal(screenBody.code, "OJS_EDITOR_UNASSIGNED");
+      assert.ok(screenBody.details);
+      assert.equal(screenBody.details.ojsSubmissionId, UNASSIGNED_OJS_ID);
+      assert.equal(screenBody.details.title, "Pengujian Naskah Belum Di-assign Editor OJS");
+      assert.equal(screenBody.details.authorName, "Penulis Peneliti Mandiri");
 
       const msInDb = await db.select().from(manuscripts).where(eq(manuscripts.id, unassignedMsId)).limit(1);
       assert.ok(msInDb.length > 0);
-      assert.ok(msInDb[0].status === "passed" || msInDb[0].status === "needs_revision");
+      assert.equal(msInDb[0].status, "pending", "Unassigned manuscript must remain pending");
     } finally {
+      await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
+    }
+  });
+
+  it("fails closed with HTTP 503 OJS_UNAVAILABLE and busy message when OJS API cannot be reached", async () => {
+    const BUSY_OJS_ID = 9999756;
+    await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, BUSY_OJS_ID));
+
+    const formData = new FormData();
+    const docxFile = new File([new Uint8Array(sampleDocxBuffer)], "naskah_ojs_busy.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    formData.append("file", docxFile);
+    formData.append("ojs_submission_id", String(BUSY_OJS_ID));
+    formData.append("title", "Pengujian OJS Sibuk Saat Cek Editor");
+    formData.append("author_name", "Penulis OJS Sibuk");
+
+    const ingestReq = new NextRequest("http://localhost:3000/api/check-submission", {
+      method: "POST",
+      headers: { "x-mqc-api-key": SECRET_KEY },
+      body: formData,
+    });
+
+    const ingestRes = await POST(ingestReq);
+    assert.equal(ingestRes.status, 200);
+    const ingestBody = await ingestRes.json();
+    const busyMsId = ingestBody.manuscriptId;
+
+    const prevDryRun = process.env.OJS_SYNC_DRY_RUN;
+    const prevApiKey = process.env.OJS_API_KEY;
+    process.env.OJS_SYNC_DRY_RUN = "false";
+    process.env.OJS_API_KEY = "";
+    resetOjsCircuitBreaker();
+
+    try {
+      const screenReq = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: staffCookie },
+        body: JSON.stringify({
+          manuscriptIds: [busyMsId],
+        }),
+      });
+
+      const screenRes = await batchScreenPOST(screenReq);
+      assert.equal(screenRes.status, 503, "Should return HTTP 503 Service Unavailable");
+
+      const screenBody = await screenRes.json();
+      assert.equal(screenBody.success, false);
+      assert.equal(screenBody.code, "OJS_UNAVAILABLE");
+      assert.equal(screenBody.error, "OJS sedang sibuk. Silakan coba kembali beberapa saat lagi.");
+
+      const msInDb = await db.select().from(manuscripts).where(eq(manuscripts.id, busyMsId)).limit(1);
+      assert.ok(msInDb.length > 0);
+      assert.equal(msInDb[0].status, "pending", "Manuscript must remain pending when OJS is unavailable");
+    } finally {
+      process.env.OJS_SYNC_DRY_RUN = prevDryRun;
+      process.env.OJS_API_KEY = prevApiKey;
+      resetOjsCircuitBreaker();
+      await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, BUSY_OJS_ID));
+    }
+  });
+
+  it("handles mixed batch: processes assigned submission while gating unassigned submission with OJS_EDITOR_UNASSIGNED", async () => {
+    const ASSIGNED_OJS_ID = 9999757;
+    const UNASSIGNED_OJS_ID = 9999755;
+    await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, ASSIGNED_OJS_ID));
+    await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
+
+    const makeIngest = async (ojsId: number, filename: string, title: string) => {
+      const fd = new FormData();
+      fd.append(
+        "file",
+        new File([new Uint8Array(sampleDocxBuffer)], filename, {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+      );
+      fd.append("ojs_submission_id", String(ojsId));
+      fd.append("title", title);
+      fd.append("author_name", "Penulis Uji Batch");
+
+      const res = await POST(
+        new NextRequest("http://localhost:3000/api/check-submission", {
+          method: "POST",
+          headers: { "x-mqc-api-key": SECRET_KEY },
+          body: fd,
+        }),
+      );
+      assert.equal(res.status, 200);
+      return (await res.json()).manuscriptId as string;
+    };
+
+    try {
+      const assignedMsId = await makeIngest(ASSIGNED_OJS_ID, "batch_assigned.docx", "Naskah Sudah Diassign");
+      const unassignedMsId = await makeIngest(UNASSIGNED_OJS_ID, "batch_unassigned.docx", "Naskah Belum Diassign");
+
+      const batchReq = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: staffCookie },
+        body: JSON.stringify({
+          manuscriptIds: [assignedMsId, unassignedMsId],
+        }),
+      });
+
+      const batchRes = await batchScreenPOST(batchReq);
+      assert.equal(batchRes.status, 200);
+      const batchBody = await batchRes.json();
+      assert.equal(batchBody.success, true);
+      assert.equal(batchBody.processedCount, 1);
+
+      const okItem = batchBody.results.find((r: any) => r.manuscriptId === assignedMsId);
+      assert.equal(okItem?.success, true);
+
+      const blockedItem = batchBody.results.find((r: any) => r.manuscriptId === unassignedMsId);
+      assert.equal(blockedItem?.success, false);
+      assert.equal(blockedItem?.code, "OJS_EDITOR_UNASSIGNED");
+      assert.equal(blockedItem?.unassignedDetails?.ojsSubmissionId, UNASSIGNED_OJS_ID);
+
+      const [unassignedInDb] = await db
+        .select()
+        .from(manuscripts)
+        .where(eq(manuscripts.id, unassignedMsId))
+        .limit(1);
+      assert.equal(unassignedInDb.status, "pending");
+    } finally {
+      await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, ASSIGNED_OJS_ID));
       await db.delete(manuscripts).where(eq(manuscripts.ojsSubmissionId, UNASSIGNED_OJS_ID));
     }
   });

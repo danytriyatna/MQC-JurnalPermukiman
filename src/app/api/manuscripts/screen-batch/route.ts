@@ -6,7 +6,7 @@ import {
   resolveReviewedByForManuscript,
   uploadOrUpdateReportToOjs,
   buildOjsReportFileName,
-  getAssignedEditorFromOjs,
+  ensureAssignedEditorForScreening,
 } from "@/lib/ojs/ojsClient";
 import { buildJobIdempotencyKey } from "@/lib/queue/screeningQueue";
 import { requireStaffSession } from "@/lib/auth/guard";
@@ -80,7 +80,13 @@ export async function POST(request: NextRequest) {
     status?: ManuscriptStatus;
     score?: number;
     passed?: boolean;
+    code?: "OJS_EDITOR_UNASSIGNED" | "OJS_UNAVAILABLE";
     error?: string;
+    unassignedDetails?: {
+      ojsSubmissionId: number;
+      title: string;
+      authorName: string;
+    };
     summary?: {
       totalChecked: number;
       totalPassed: number;
@@ -119,27 +125,45 @@ export async function POST(request: NextRequest) {
 
       const manuscript = msRows[0];
 
-      // 1b. Resolusi Penugasan Editor di OJS (Non-blocking)
-      // Jika ada editor yang ditugaskan di OJS, simpan ke database untuk laporan Word.
-      // Jika belum ada editor, pemeriksaan tetap dilanjutkan dan nama editor diisi "-" pada laporan.
-      if (typeof manuscript.ojsSubmissionId === "number" && manuscript.ojsSubmissionId > 0) {
-        const assignedEditor = manuscript.assignedEditorName;
-        if (!assignedEditor || assignedEditor.trim().length === 0) {
-          try {
-            const lookup = await getAssignedEditorFromOjs(manuscript.ojsSubmissionId);
-            if (lookup.editorName) {
-              await db
-                .update(manuscripts)
-                .set({
-                  assignedEditorName: lookup.editorName,
-                  assignedEditorFetchedAt: lookup.fetchedAt,
-                })
-                .where(eq(manuscripts.id, manuscriptId));
-            }
-          } catch {
-            // Abaikan kegagalan lookup/cache editor OJS, proses screening tetap berjalan
-          }
+      // 1b. Validasi Penugasan Editor di OJS (Strict Gating)
+      // Naskah dari OJS wajib sudah memiliki Editor yang ditugaskan di OJS sebelum pemeriksaan MQC dijalankan.
+      const editorGate = await ensureAssignedEditorForScreening({
+        id: manuscript.id,
+        ojsSubmissionId: manuscript.ojsSubmissionId,
+        assignedEditorName: manuscript.assignedEditorName,
+        assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt,
+      });
+
+      if (!editorGate.ok) {
+        const unassignedDetails =
+          editorGate.code === "OJS_EDITOR_UNASSIGNED" && manuscript.ojsSubmissionId
+            ? {
+                ojsSubmissionId: manuscript.ojsSubmissionId,
+                title: manuscript.title,
+                authorName: manuscript.authorName || "Penulis OJS",
+              }
+            : undefined;
+
+        if (manuscriptIds.length === 1) {
+          return NextResponse.json(
+            {
+              success: false,
+              code: editorGate.code,
+              error: editorGate.error,
+              ...(unassignedDetails ? { details: unassignedDetails } : {}),
+            },
+            { status: editorGate.httpStatus, headers: corsHeaders },
+          );
         }
+
+        results.push({
+          manuscriptId,
+          success: false,
+          code: editorGate.code,
+          error: editorGate.error,
+          ...(unassignedDetails ? { unassignedDetails } : {}),
+        });
+        continue;
       }
 
       // 2. Ambil versi aktif naskah
@@ -296,8 +320,9 @@ export async function POST(request: NextRequest) {
         const reviewedBy = await resolveReviewedByForManuscript({
           id: manuscript.id,
           ojsSubmissionId: manuscript.ojsSubmissionId,
-          assignedEditorName: manuscript.assignedEditorName,
-          assignedEditorFetchedAt: manuscript.assignedEditorFetchedAt,
+          assignedEditorName: editorGate.assignedEditorName ?? manuscript.assignedEditorName,
+          assignedEditorFetchedAt:
+            editorGate.assignedEditorFetchedAt ?? manuscript.assignedEditorFetchedAt,
         });
 
         const reportFindings: ReportFinding[] = screening.findings.map((f) => ({
