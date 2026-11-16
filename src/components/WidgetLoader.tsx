@@ -21,7 +21,7 @@ export function WidgetLoader() {
 
   return (
     <Script
-      src="/jp-chat-widget.js?v=20261111_navy"
+      src="/jp-chat-widget.js?v=20261115_v2_gold_ring"
       data-endpoint="http://localhost:3001/api/widget/chat"
       strategy="lazyOnload"
     />

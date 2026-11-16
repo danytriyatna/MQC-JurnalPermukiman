@@ -934,7 +934,7 @@ export interface RuleCatalogEntry {
 
 /**
  * Canonical list of every distinct automated ruleId the engine can produce
- * a finding for (23 entries, matching TOTAL_AUTOMATED_RULE_COUNT above).
+ * a finding for. Derived dynamically into TOTAL_AUTOMATED_RULE_COUNT below.
  * Used to build the exported report: any rule not present among a
  * screening run's findings is reported as compliant ("Sesuai"), consistent
  * with how totalRulesPassed is derived in screenManuscript.ts.

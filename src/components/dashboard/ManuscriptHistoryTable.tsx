@@ -73,12 +73,12 @@ const manuscriptColumns: DataTableColumn<Manuscript>[] = [
       <div>
         <Link
           href={`/manuscripts/${manuscript.id}`}
-          className="block truncate text-sm font-medium text-slate-900 transition-colors hover:text-primary hover:underline"
+          className="font-serif block text-[15px] font-bold leading-[1.35] text-slate-900 transition-colors hover:text-[#A0320A] hover:underline line-clamp-2"
           title={manuscript.title}
         >
           {manuscript.title}
         </Link>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+        <p className="mt-1 truncate text-xs leading-[1.45] text-muted-foreground">
           {manuscript.originalFileName} · v{manuscript.versionNumber}
         </p>
       </div>

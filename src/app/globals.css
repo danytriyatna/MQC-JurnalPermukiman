@@ -28,6 +28,10 @@
   --chart-3: hsl(197 37% 24%);
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(27 87% 67%);
+  --puskim-brick: #C13D0D;
+  --puskim-brick-dark: #A0320A;
+  --puskim-brick-soft: #FDF4F0;
+  --puskim-brick-border: #F4D4C9;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
@@ -88,8 +92,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plus-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-serif: var(--font-lora), "Lora", Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
 }
 
 html,
@@ -100,7 +105,12 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+.font-serif {
+  font-family: var(--font-lora), "Lora", Georgia, serif !important;
 }
 
 @layer components {
