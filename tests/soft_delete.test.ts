@@ -1,14 +1,40 @@
-import { describe, it, after } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { db, manuscripts, users, client } from "../src/db";
 import { eq, isNull, inArray, and } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { DELETE as deleteSingleRoute } from "../src/app/api/manuscripts/[id]/route";
 import { POST as deleteBatchRoute } from "../src/app/api/manuscripts/delete-batch/route";
+import { createStaffSessionCookieHeader } from "./helpers/authTestHelper";
 
 describe("Soft Delete Feature Verification Suite (Single & Batch)", () => {
+  let authCookie: string;
+
+  before(async () => {
+    const session = await createStaffSessionCookieHeader();
+    authCookie = session.cookieHeader;
+  });
+
   after(async () => {
     await client.end();
+  });
+
+  it("rejects unauthenticated DELETE /api/manuscripts/[id] and POST /api/manuscripts/delete-batch with HTTP 401", async () => {
+    const unauthSingle = new NextRequest("http://localhost:3000/api/manuscripts/00000000-0000-0000-0000-000000000000", {
+      method: "DELETE",
+    });
+    const resSingle = await deleteSingleRoute(unauthSingle, {
+      params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }),
+    });
+    assert.equal(resSingle.status, 401);
+
+    const unauthBatch = new NextRequest("http://localhost:3000/api/manuscripts/delete-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ manuscriptIds: [] }),
+    });
+    const resBatch = await deleteBatchRoute(unauthBatch);
+    assert.equal(resBatch.status, 401);
   });
 
   it("soft-deletes a single manuscript via DELETE /api/manuscripts/[id]", async () => {
@@ -34,6 +60,7 @@ describe("Soft Delete Feature Verification Suite (Single & Batch)", () => {
     // 3. Panggil endpoint DELETE satuan
     const dummyReq = new NextRequest(`http://localhost:3000/api/manuscripts/${inserted.id}`, {
       method: "DELETE",
+      headers: { Cookie: authCookie },
     });
 
     const res = await deleteSingleRoute(dummyReq, {
@@ -100,7 +127,7 @@ describe("Soft Delete Feature Verification Suite (Single & Batch)", () => {
     // 2. Panggil endpoint batch delete
     const batchReq = new NextRequest("http://localhost:3000/api/manuscripts/delete-batch", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: authCookie },
       body: JSON.stringify({ manuscriptIds: ids }),
     });
 
@@ -137,7 +164,7 @@ describe("Soft Delete Feature Verification Suite (Single & Batch)", () => {
     // 1. Array kosong
     const emptyReq = new NextRequest("http://localhost:3000/api/manuscripts/delete-batch", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: authCookie },
       body: JSON.stringify({ manuscriptIds: [] }),
     });
     const emptyRes = await deleteBatchRoute(emptyReq);
@@ -148,7 +175,7 @@ describe("Soft Delete Feature Verification Suite (Single & Batch)", () => {
     // 2. Payload bukan array
     const invalidReq = new NextRequest("http://localhost:3000/api/manuscripts/delete-batch", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: authCookie },
       body: JSON.stringify({ manuscriptIds: "bukan-array" }),
     });
     const invalidRes = await deleteBatchRoute(invalidReq);

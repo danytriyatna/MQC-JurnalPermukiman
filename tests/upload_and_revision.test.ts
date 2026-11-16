@@ -13,13 +13,17 @@ import { GET as reportVersionGET } from "../src/app/api/manuscripts/[id]/version
 import { db, manuscripts, manuscriptVersions, screeningRuns, findings, client } from "../src/db";
 import { eq } from "drizzle-orm";
 import { getStorageDir } from "../src/lib/storage/localStorage";
+import { createStaffSessionCookieHeader } from "./helpers/authTestHelper";
 
 describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Test Suite", () => {
   let sampleDocxBuffer: Buffer;
   let createdManuscriptId: string;
+  let authCookie: string;
 
   before(async () => {
     process.env.MANUSCRIPT_STORAGE_DIR = "storage/test_manuscripts_upload";
+    const session = await createStaffSessionCookieHeader();
+    authCookie = session.cookieHeader;
 
     // Buat dummy berkas DOCX valid
     const doc = new Document({
@@ -63,6 +67,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
 
     const req = new NextRequest("http://localhost:3000/api/manuscripts", {
       method: "POST",
+      headers: { Cookie: authCookie },
       body: formData,
     });
 
@@ -112,6 +117,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
       `http://localhost:3000/api/manuscripts/${createdManuscriptId}/revisions`,
       {
         method: "POST",
+        headers: { Cookie: authCookie },
         body: formData,
       },
     );
@@ -153,6 +159,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
 
     const req = new NextRequest(
       `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions`,
+      { headers: { Cookie: authCookie } },
     );
     const res = await getVersionsGET(req, {
       params: Promise.resolve({ id: createdManuscriptId }),
@@ -179,6 +186,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
 
     const req = new NextRequest(
       `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions/${v2.id}`,
+      { headers: { Cookie: authCookie } },
     );
     const res = await getVersionDetailGET(req, {
       params: Promise.resolve({ id: createdManuscriptId, versionId: v2.id }),
@@ -203,6 +211,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
 
     const req = new NextRequest(
       `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions/${v2.id}/download`,
+      { headers: { Cookie: authCookie } },
     );
     const res = await downloadVersionGET(req, {
       params: Promise.resolve({ id: createdManuscriptId, versionId: v2.id }),
@@ -227,6 +236,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
 
     const req = new NextRequest(
       `http://localhost:3000/api/manuscripts/${createdManuscriptId}/versions/${v2.id}/report`,
+      { headers: { Cookie: authCookie } },
     );
     const res = await reportVersionGET(req, {
       params: Promise.resolve({ id: createdManuscriptId, versionId: v2.id }),
@@ -240,11 +250,52 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
     );
   });
 
+  it("rejects unauthenticated access to upload, revision, version, download, and report routes with HTTP 401", async () => {
+    const fakeId = createdManuscriptId || "00000000-0000-0000-0000-000000000000";
+    const fakeVer = "00000000-0000-0000-0000-000000000001";
+
+    const resCreate = await createManuscriptPOST(
+      new NextRequest("http://localhost:3000/api/manuscripts", { method: "POST" }),
+    );
+    assert.equal(resCreate.status, 401);
+
+    const resRev = await createRevisionPOST(
+      new NextRequest(`http://localhost:3000/api/manuscripts/${fakeId}/revisions`, { method: "POST" }),
+      { params: Promise.resolve({ id: fakeId }) },
+    );
+    assert.equal(resRev.status, 401);
+
+    const resVers = await getVersionsGET(
+      new NextRequest(`http://localhost:3000/api/manuscripts/${fakeId}/versions`),
+      { params: Promise.resolve({ id: fakeId }) },
+    );
+    assert.equal(resVers.status, 401);
+
+    const resDetail = await getVersionDetailGET(
+      new NextRequest(`http://localhost:3000/api/manuscripts/${fakeId}/versions/${fakeVer}`),
+      { params: Promise.resolve({ id: fakeId, versionId: fakeVer }) },
+    );
+    assert.equal(resDetail.status, 401);
+
+    const resDl = await downloadVersionGET(
+      new NextRequest(`http://localhost:3000/api/manuscripts/${fakeId}/versions/${fakeVer}/download`),
+      { params: Promise.resolve({ id: fakeId, versionId: fakeVer }) },
+    );
+    assert.equal(resDl.status, 401);
+
+    const resRep = await reportVersionGET(
+      new NextRequest(`http://localhost:3000/api/manuscripts/${fakeId}/versions/${fakeVer}/report`),
+      { params: Promise.resolve({ id: fakeId, versionId: fakeVer }) },
+    );
+    assert.equal(resRep.status, 401);
+  });
+
   it("handles validation edge cases: missing file, non-docx, and invalid manuscript ID", async () => {
     // 1. Missing file in POST /api/manuscripts
     const emptyForm = new FormData();
     const reqEmpty = new NextRequest("http://localhost:3000/api/manuscripts", {
       method: "POST",
+      headers: { Cookie: authCookie },
       body: emptyForm,
     });
     const resEmpty = await createManuscriptPOST(reqEmpty);
@@ -255,6 +306,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
     txtForm.append("file", new File(["sample text"], "document.txt", { type: "text/plain" }));
     const reqTxt = new NextRequest("http://localhost:3000/api/manuscripts", {
       method: "POST",
+      headers: { Cookie: authCookie },
       body: txtForm,
     });
     const resTxt = await createManuscriptPOST(reqTxt);
@@ -268,6 +320,7 @@ describe("Point 2: Modernized Local Storage & PostgreSQL Upload and Revision Tes
       `http://localhost:3000/api/manuscripts/${fakeId}/revisions`,
       {
         method: "POST",
+        headers: { Cookie: authCookie },
         body: dummyForm,
       },
     );

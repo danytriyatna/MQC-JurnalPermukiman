@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readManuscriptFile } from "@/lib/storage/localStorage";
+import { requireStaffOrInspectionToken } from "@/lib/auth/guard";
 import { db, manuscriptVersions } from "@/db";
 import { eq, and } from "drizzle-orm";
 
@@ -7,8 +8,13 @@ interface RouteParams {
   params: Promise<{ id: string; versionId: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id: manuscriptId, versionId } = await params;
+
+  const authResult = await requireStaffOrInspectionToken(request, manuscriptId);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
+  }
 
   try {
     const rows = await db

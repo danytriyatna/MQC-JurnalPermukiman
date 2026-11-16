@@ -12,17 +12,21 @@ import { createInspectionToken } from "../src/lib/auth/token";
 import { db, manuscripts, manuscriptVersions, screeningRuns, client } from "../src/db";
 import { eq } from "drizzle-orm";
 import { getStorageDir } from "../src/lib/storage/localStorage";
+import { createStaffSessionCookieHeader } from "./helpers/authTestHelper";
 
 describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening Queue Test", () => {
   const SECRET_KEY = "pupr_mqc_secure_token_2026";
   const TEST_OJS_SUBMISSION_ID = 9999753;
   let sampleDocxBuffer: Buffer;
   let createdManuscriptId: string;
+  let staffCookie: string;
 
   before(async () => {
     process.env.MQC_API_SECRET = SECRET_KEY;
     process.env.JWT_SECRET = "test_jwt_secret_at_least_32_characters_long_for_mqc_2026";
     process.env.CORS_ALLOWED_ORIGIN = "http://localhost:8000";
+    const session = await createStaffSessionCookieHeader();
+    staffCookie = session.cookieHeader;
     process.env.OJS_SYNC_DRY_RUN = "true";
     process.env.AUTO_DRAIN_ON_INGEST = "false";
     process.env.MANUSCRIPT_STORAGE_DIR = "storage/test_manuscripts";
@@ -292,11 +296,22 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     assert.equal(files.length, 2, "Storage directory should now contain 2 versions");
   });
 
+  it("batch screening route POST /api/manuscripts/screen-batch rejects unauthenticated requests with HTTP 401", async () => {
+    const req = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ manuscriptIds: [createdManuscriptId] }),
+    });
+    const res = await batchScreenPOST(req);
+    assert.equal(res.status, 401);
+  });
+
   it("batch screening route POST /api/manuscripts/screen-batch screens pending manuscript and updates status to passed/needs_revision", async () => {
     const screenReq = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Cookie: staffCookie,
       },
       body: JSON.stringify({
         manuscriptIds: [createdManuscriptId],
@@ -408,7 +423,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
   it("batch screening POST /api/manuscripts/screen-batch rejects non-JSON body with HTTP 400", async () => {
     const req = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
       method: "POST",
-      headers: { "Content-Type": "text/plain" },
+      headers: { "Content-Type": "text/plain", Cookie: staffCookie },
       body: "not-json-content",
     });
 
@@ -421,7 +436,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
   it("batch screening POST /api/manuscripts/screen-batch rejects non-array manuscriptIds with HTTP 400", async () => {
     const req = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: staffCookie },
       body: JSON.stringify({ manuscriptIds: "invalid-string" }),
     });
 
@@ -435,7 +450,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
   it("batch screening handles invalid UUID formats and non-existent IDs without 500 error", async () => {
     const req = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: staffCookie },
       body: JSON.stringify({
         manuscriptIds: [
           "invalid-not-a-uuid",
@@ -499,7 +514,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
       // 3. Jalankan batch screening dengan naskah valid dan naskah rusak sekaligus
       const batchReq = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: staffCookie },
         body: JSON.stringify({
           manuscriptIds: [corruptMsId, createdManuscriptId],
         }),
@@ -563,7 +578,7 @@ describe("Endpoint POST /api/check-submission & Asynchronous Editorial Screening
     try {
       const screenReq = new NextRequest("http://localhost:3000/api/manuscripts/screen-batch", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: staffCookie },
         body: JSON.stringify({
           manuscriptIds: [unassignedMsId],
         }),

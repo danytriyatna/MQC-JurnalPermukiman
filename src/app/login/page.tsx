@@ -1,22 +1,12 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getStaffSession } from "@/lib/auth/guard";
 import LoginForm from "@/components/auth/LoginForm";
 
 export default async function LoginPage() {
-  if (process.env.NEXT_PUBLIC_DEV_MODE !== "true") {
-    try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        redirect("/dashboard");
-      }
-    } catch {
-      // Offline fallback
-    }
+  const session = await getStaffSession();
+  if (session) {
+    redirect("/dashboard");
   }
 
   return (

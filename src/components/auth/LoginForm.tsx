@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,13 +30,13 @@ export default function LoginForm() {
     setServerError(null);
 
     try {
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const result = await signIn("credentials", {
         email: values.email,
         password: values.password,
+        redirect: false,
       });
 
-      if (signInError) {
+      if (!result || result.error || !result.ok) {
         setServerError("Email atau kata sandi salah.");
         toast.error("Email atau kata sandi salah.");
         return;

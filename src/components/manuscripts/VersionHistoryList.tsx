@@ -36,6 +36,7 @@ interface VersionHistoryListProps {
   versions: VersionHistoryItem[];
   manuscriptId?: string;
   currentVersionId?: string | null;
+  inspectionToken?: string;
 }
 
 interface ReferenceCheckItem {
@@ -133,7 +134,11 @@ export default function VersionHistoryList({
   versions,
   manuscriptId,
   currentVersionId,
+  inspectionToken,
 }: VersionHistoryListProps) {
+  const tokenQuery = inspectionToken
+    ? `?token=${encodeURIComponent(inspectionToken)}`
+    : "";
   const [selectedVersion, setSelectedVersion] = useState<VersionHistoryItem | null>(null);
   const [activeTab, setActiveTab] = useState<"format" | "references">("format");
   const [isLoading, setIsLoading] = useState(false);
@@ -169,7 +174,9 @@ export default function VersionHistoryList({
 
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/manuscripts/${manuscriptId}/versions/${v.id}`);
+      const res = await fetch(
+        `/api/manuscripts/${manuscriptId}/versions/${v.id}${tokenQuery}`
+      );
       if (!res.ok) {
         throw new Error("Gagal mengambil data analisis versi.");
       }
@@ -649,7 +656,7 @@ export default function VersionHistoryList({
                     className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100"
                   >
                     <a
-                      href={`/api/manuscripts/${manuscriptId}/versions/${selectedVersion.id}/download`}
+                      href={`/api/manuscripts/${manuscriptId}/versions/${selectedVersion.id}/download${tokenQuery}`}
                       download={selectedVersion.originalFileName}
                     >
                       <Download className="h-4 w-4 text-slate-500" />
@@ -663,7 +670,7 @@ export default function VersionHistoryList({
                     className="gap-1.5 border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
                   >
                     <a
-                      href={`/api/manuscripts/${manuscriptId}/versions/${selectedVersion.id}/report`}
+                      href={`/api/manuscripts/${manuscriptId}/versions/${selectedVersion.id}/report${tokenQuery}`}
                       download={`Laporan-review-${selectedVersion.originalFileName}`}
                     >
                       <FileDown className="h-4 w-4 text-indigo-600" />

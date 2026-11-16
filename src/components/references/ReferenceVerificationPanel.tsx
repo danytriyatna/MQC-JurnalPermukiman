@@ -221,17 +221,22 @@ export default function ReferenceVerificationPanel({
   manuscriptId,
   initialRun,
   initialChecks,
+  inspectionToken,
 }: {
   manuscriptId: string;
   initialRun: ReferenceRunData | null;
   initialChecks: ReferenceCheckRowData[];
+  inspectionToken?: string;
 }) {
   const [run, setRun] = useState(initialRun);
   const [checks, setChecks] = useState(initialChecks);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const endpoint = `/api/manuscripts/${manuscriptId}/references`;
+  const tokenQuery = inspectionToken
+    ? `?token=${encodeURIComponent(inspectionToken)}`
+    : "";
+  const endpoint = `/api/manuscripts/${manuscriptId}/references${tokenQuery}`;
 
   const readBody = async (res: Response) => {
     // An error raised upstream of the route comes back as HTML, so parsing is

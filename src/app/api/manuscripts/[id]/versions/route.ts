@@ -1,14 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db, manuscriptVersions, users } from "@/db";
 import { eq, desc } from "drizzle-orm";
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffOrInspectionToken } from "@/lib/auth/guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id: manuscriptId } = await params;
+
+  const authResult = await requireStaffOrInspectionToken(request, manuscriptId);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
+  }
 
   try {
     const rows = await db
@@ -39,25 +44,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ data });
   } catch (err) {
     console.error("Gagal memuat riwayat versi dari PostgreSQL lokal:", err);
+    return NextResponse.json({ error: "Gagal memuat riwayat versi." }, { status: 500 });
   }
-
-  // Fallback ke Supabase jika lokal gagal
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("manuscript_versions")
-      .select(
-        "id, version_number, original_file_name, uploaded_at, parse_status, parse_error_message, uploaded_by_profile:profiles!uploaded_by(full_name)",
-      )
-      .eq("manuscript_id", manuscriptId)
-      .order("version_number", { ascending: false });
-
-    if (!error && data) {
-      return NextResponse.json({ data });
-    }
-  } catch {
-    // Abaikan jika Supabase offline
-  }
-
-  return NextResponse.json({ error: "Gagal memuat riwayat versi." }, { status: 500 });
 }

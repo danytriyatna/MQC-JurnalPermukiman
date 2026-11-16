@@ -1,110 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { screenManuscript, summarize } from "@/lib/docx/screenManuscript";
 import { saveManuscriptFile } from "@/lib/storage/localStorage";
 import { validateDocxFileName, validateDocxSize } from "@/lib/upload/validateFile";
-import { receiveUploadedManuscript } from "@/lib/upload/receiveUpload";
-import { db, manuscripts, manuscriptVersions, screeningRuns, findings, users } from "@/db";
+import { requireStaffSession } from "@/lib/auth/guard";
+import { db, manuscripts, manuscriptVersions, screeningRuns, findings } from "@/db";
 import { eq } from "drizzle-orm";
 import { ManuscriptStatus } from "@/lib/types";
 
 const RULE_SET_VERSION = "jurnal-permukiman-2026-v1";
 
 export async function POST(request: NextRequest) {
-  let originalFileName = "";
-  let buffer: Buffer;
-  let storagePath: string;
+  const authResult = await requireStaffSession(request);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
+  }
 
   const contentType = request.headers.get("content-type") || "";
-
-  // 1. Dapatkan berkas baik via multipart/form-data (standar modern) maupun legacy JSON
-  if (contentType.includes("multipart/form-data")) {
-    let formData: FormData;
-    try {
-      formData = await request.formData();
-    } catch {
-      return NextResponse.json(
-        { error: "Gagal memproses data formulir (invalid form-data)." },
-        { status: 400 },
-      );
-    }
-
-    const file = formData.get("file");
-    if (!file || !(file instanceof Blob)) {
-      return NextResponse.json(
-        { error: "Berkas naskah tidak ditemukan dalam form data." },
-        { status: 400 },
-      );
-    }
-
-    originalFileName = (file as any).name || "naskah.docx";
-    const nameError = validateDocxFileName(originalFileName);
-    if (nameError) {
-      return NextResponse.json({ error: nameError }, { status: 400 });
-    }
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } catch {
-      return NextResponse.json(
-        { error: "Gagal membaca byte stream berkas naskah." },
-        { status: 500 },
-      );
-    }
-
-    const sizeError = validateDocxSize(buffer.length);
-    if (sizeError) {
-      return NextResponse.json({ error: sizeError }, { status: 400 });
-    }
-
-    // Simpan ke disk fisik lokal (storage/manuscripts/submissions/...)
-    const saveResult = await saveManuscriptFile(buffer, originalFileName, "submissions");
-    storagePath = saveResult.storagePath;
-  } else {
-    // Jalur mundur: Legacy JSON payload
-    let supabaseUser: any = null;
-    try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      supabaseUser = user;
-    } catch {
-      // Supabase offline
-    }
-
-    const supabase = await createClient().catch(() => null);
-    const received =
-      supabaseUser && supabase
-        ? await receiveUploadedManuscript(request, supabase, supabaseUser.id)
-        : { ok: false as const, error: "Unggahan harus menggunakan format FormData.", status: 400 };
-
-    if (!received.ok) {
-      return NextResponse.json({ error: received.error }, { status: received.status });
-    }
-
-    storagePath = received.storagePath;
-    originalFileName = received.originalFileName;
-    buffer = received.buffer;
+  if (!contentType.includes("multipart/form-data")) {
+    return NextResponse.json(
+      { error: "Unggahan harus menggunakan format multipart/form-data." },
+      { status: 400 },
+    );
   }
 
-  // 2. Resolusi Pengguna (Opsional / Staff / Default)
-  let userId: string | null = null;
+  let formData: FormData;
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) userId = user.id;
+    formData = await request.formData();
   } catch {
-    // Abaikan jika Supabase auth tidak aktif
+    return NextResponse.json(
+      { error: "Gagal memproses data formulir (invalid form-data)." },
+      { status: 400 },
+    );
   }
 
-  if (!userId) {
-    const [firstUser] = await db.select({ id: users.id }).from(users).limit(1);
-    if (firstUser) userId = firstUser.id;
+  const file = formData.get("file");
+  if (!file || !(file instanceof Blob)) {
+    return NextResponse.json(
+      { error: "Berkas naskah tidak ditemukan dalam form data." },
+      { status: 400 },
+    );
   }
+
+  const originalFileName = (file as any).name || "naskah.docx";
+  const nameError = validateDocxFileName(originalFileName);
+  if (nameError) {
+    return NextResponse.json({ error: nameError }, { status: 400 });
+  }
+
+  let buffer: Buffer;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    buffer = Buffer.from(arrayBuffer);
+  } catch {
+    return NextResponse.json(
+      { error: "Gagal membaca byte stream berkas naskah." },
+      { status: 500 },
+    );
+  }
+
+  const sizeError = validateDocxSize(buffer.length);
+  if (sizeError) {
+    return NextResponse.json({ error: sizeError }, { status: 400 });
+  }
+
+  // Simpan ke disk fisik lokal (storage/manuscripts/submissions/...)
+  const saveResult = await saveManuscriptFile(buffer, originalFileName, "submissions");
+  const storagePath = saveResult.storagePath;
+  const userId = authResult.session.userId;
 
   const title = originalFileName.replace(/\.docx$/i, "");
 

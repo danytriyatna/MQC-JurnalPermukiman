@@ -1,7 +1,7 @@
+import { redirect } from "next/navigation";
 import AppHeader from "@/components/layout/AppHeader";
 import ManuscriptDashboard from "@/components/dashboard/ManuscriptDashboard";
-import { createClient } from "@/lib/supabase/server";
-import { mapManuscriptRow, type ManuscriptRow } from "@/lib/supabase/mappers";
+import { getStaffSession } from "@/lib/auth/guard";
 import { db, manuscripts as manuscriptsTable, manuscriptVersions, users } from "@/db";
 import { desc, isNull, eq } from "drizzle-orm";
 import { Manuscript, ManuscriptStatus } from "@/lib/types";
@@ -9,6 +9,11 @@ import { Manuscript, ManuscriptStatus } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const session = await getStaffSession();
+  if (!session) {
+    redirect("/login");
+  }
+
   let manuscriptsList: Manuscript[] = [];
   let dbError = false;
 
@@ -57,27 +62,6 @@ export default async function DashboardPage() {
   } catch (err) {
     console.error("Gagal mengambil naskah dari database lokal:", err);
     dbError = true;
-  }
-
-  // 2. Fallback ke Supabase HANYA jika database lokal error/tidak terhubung
-  if (dbError) {
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("manuscripts")
-        .select(
-          "id, title, original_file_name, status, version_number, total_rules_checked, total_rules_passed, error_findings, warning_findings, created_at, updated_at, uploaded_by_profile:profiles!uploaded_by(full_name)",
-        )
-        .is("deleted_at", null)
-        .order("updated_at", { ascending: false });
-
-      if (data) {
-        manuscriptsList = (data as ManuscriptRow[]).map(mapManuscriptRow);
-        dbError = false;
-      }
-    } catch {
-      // Supabase offline/tidak dikonfigurasi
-    }
   }
 
   return (

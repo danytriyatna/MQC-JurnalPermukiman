@@ -1,7 +1,16 @@
+import { redirect } from "next/navigation";
 import AppHeader from "@/components/layout/AppHeader";
 import UploadForm from "@/components/upload/UploadForm";
+import { getStaffSession } from "@/lib/auth/guard";
 
-export default function UploadManuscriptPage() {
+export const dynamic = "force-dynamic";
+
+export default async function UploadManuscriptPage() {
+  const session = await getStaffSession();
+  if (!session) {
+    redirect("/login");
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader />

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { readManuscriptFile } from "@/lib/storage/localStorage";
-import { verifyInspectionToken } from "@/lib/auth/token";
+import { requireStaffOrInspectionToken } from "@/lib/auth/guard";
 import { db, manuscripts, manuscriptVersions } from "@/db";
 import { eq } from "drizzle-orm";
 
@@ -12,36 +11,9 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
-  // 1. Verifikasi Otorisasi: Signed Token ATAU Sesi Pengguna
-  const token = request.nextUrl.searchParams.get("token");
-  let isAuthorized = false;
-
-  if (token) {
-    const verified = await verifyInspectionToken(token, id);
-    if (verified) {
-      isAuthorized = true;
-    }
-  }
-
-  if (!isAuthorized) {
-    try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        isAuthorized = true;
-      }
-    } catch {
-      // Abaikan jika Supabase auth gagal/tidak dikonfigurasi
-    }
-  }
-
-  if (!isAuthorized) {
-    return NextResponse.json(
-      { error: "Unauthorized: Anda harus login atau menyertakan token inspeksi yang sah." },
-      { status: 401 },
-    );
+  const authResult = await requireStaffOrInspectionToken(request, id);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
   }
 
   // 2. Ambil Informasi Naskah & Versi Aktif dari Basis Data
@@ -61,27 +33,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const version = rows[0];
 
-  // 3. Baca Berkas Dokumen Fisik (Disk Lokal dengan Fallback ke Supabase Storage)
+  // 3. Baca Berkas Dokumen Fisik dari Disk Lokal
   let buffer: Buffer;
   try {
     buffer = await readManuscriptFile(version.fileStoragePath);
   } catch {
-    try {
-      const supabase = await createClient();
-      const { data: fileBlob, error: downloadError } = await supabase.storage
-        .from("manuscripts")
-        .download(version.fileStoragePath);
-
-      if (downloadError || !fileBlob) {
-        throw new Error("Berkas tidak ditemukan di storage.");
-      }
-      buffer = Buffer.from(await fileBlob.arrayBuffer());
-    } catch {
-      return NextResponse.json(
-        { error: "Gagal mengambil berkas naskah dari penyimpanan lokal maupun cloud." },
-        { status: 404 },
-      );
-    }
+    return NextResponse.json(
+      { error: "Berkas naskah tidak ditemukan di penyimpanan lokal." },
+      { status: 404 },
+    );
   }
 
   return new NextResponse(new Uint8Array(buffer), {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { parseDocx, DocxParseError } from "@/lib/docx/parseDocx";
 import { extractReferences } from "@/lib/references/extractReferences";
 import { verifyReference } from "@/lib/references/verifyReference";
@@ -8,9 +7,8 @@ import {
   ReferenceEntry,
   ReferenceKind,
 } from "@/lib/references/types";
-import { MANUSCRIPT_BUCKET } from "@/lib/upload/constants";
 import { readManuscriptFile } from "@/lib/storage/localStorage";
-import { verifyInspectionToken } from "@/lib/auth/token";
+import { requireStaffOrInspectionToken } from "@/lib/auth/guard";
 import {
   db,
   manuscripts as manuscriptsTable,
@@ -64,9 +62,6 @@ interface ReferenceCheckRow {
   match_similarity: number | null;
 }
 
-const ROW_COLUMNS =
-  "id, entry_index, raw_text, kind, doi, url, title, cited_year, verdict, confidence, note, match_source, match_title, match_year, match_url, match_similarity";
-
 async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -113,37 +108,14 @@ function entryFromStoredRow(row: ReferenceCheckRow): ReferenceEntry {
   };
 }
 
-async function checkAuth(request: NextRequest, manuscriptId: string): Promise<boolean> {
-  const token = request.nextUrl.searchParams.get("token");
-  if (token) {
-    const verified = await verifyInspectionToken(token, manuscriptId);
-    if (verified) return true;
-  }
-
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) return true;
-  } catch {
-    // Abaikan kegagalan supabase auth
-  }
-
-  return false;
-}
-
 interface ResolvedVersion {
-  isLocal: boolean;
   versionId: string;
   fileStoragePath: string;
 }
 
 async function resolveManuscriptVersion(
   manuscriptId: string,
-  supabase?: any,
 ): Promise<ResolvedVersion | null> {
-  // 1. Coba cari di PostgreSQL lokal Drizzle
   try {
     const rows = await db
       .select({
@@ -166,7 +138,6 @@ async function resolveManuscriptVersion(
 
     if (rows.length > 0 && rows[0].currentVersionId && rows[0].fileStoragePath) {
       return {
-        isLocal: true,
         versionId: rows[0].currentVersionId,
         fileStoragePath: rows[0].fileStoragePath,
       };
@@ -175,65 +146,16 @@ async function resolveManuscriptVersion(
     console.error("Gagal memeriksa versi naskah di database lokal:", err);
   }
 
-  // 2. Fallback ke Supabase jika ada
-  if (supabase) {
-    try {
-      const { data: manuscript } = await supabase
-        .from("manuscripts")
-        .select("current_version_id, deleted_at")
-        .eq("id", manuscriptId)
-        .single();
-
-      if (manuscript && !manuscript.deleted_at && manuscript.current_version_id) {
-        const { data: version } = await supabase
-          .from("manuscript_versions")
-          .select("id, file_storage_path")
-          .eq("id", manuscript.current_version_id)
-          .single();
-
-        if (version && version.file_storage_path) {
-          return {
-            isLocal: false,
-            versionId: version.id,
-            fileStoragePath: version.file_storage_path,
-          };
-        }
-      }
-    } catch {
-      // Abaikan error Supabase
-    }
-  }
-
-  return null;
-}
-
-async function getManuscriptBuffer(
-  resolved: ResolvedVersion,
-  supabase?: any,
-): Promise<Buffer | null> {
-  if (resolved.isLocal) {
-    return await readManuscriptFile(resolved.fileStoragePath);
-  }
-  if (supabase) {
-    const { data: blob } = await supabase.storage
-      .from(MANUSCRIPT_BUCKET)
-      .download(resolved.fileStoragePath);
-    if (blob) {
-      return Buffer.from(await blob.arrayBuffer());
-    }
-  }
   return null;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const isAuthorized = await checkAuth(request, id);
-
-  if (!isAuthorized) {
-    return NextResponse.json({ error: "Anda harus login." }, { status: 401 });
+  const authResult = await requireStaffOrInspectionToken(request, id);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
   }
 
-  // 1. Coba ambil dari PostgreSQL lokal Drizzle
   try {
     const localManuscript = await db
       .select({
@@ -295,63 +217,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         })),
       });
     }
-  } catch (err) {
-    console.error("Gagal membaca status verifikasi referensi lokal:", err);
-  }
-
-  // 2. Fallback ke Supabase
-  try {
-    const supabase = await createClient();
-    const version = await resolveManuscriptVersion(id, supabase);
-    if (!version) {
+    if (localManuscript.length === 0) {
       return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
     }
-
-    const { data: run } = await supabase
-      .from("reference_check_runs")
-      .select("id, source_set_version, total_references, started_at, completed_at")
-      .eq("manuscript_version_id", version.versionId)
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!run) {
-      return NextResponse.json({ run: null, checks: [] });
-    }
-
-    const { data: checks } = await supabase
-      .from("reference_checks")
-      .select(ROW_COLUMNS)
-      .eq("run_id", run.id)
-      .order("entry_index", { ascending: true });
-
-    return NextResponse.json({ run, checks: checks ?? [] });
-  } catch {
-    return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
+    return NextResponse.json({ run: null, checks: [] });
+  } catch (err) {
+    console.error("Gagal membaca status verifikasi referensi lokal:", err);
+    return NextResponse.json({ error: "Gagal membaca status verifikasi referensi." }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const isAuthorized = await checkAuth(request, id);
-
-  if (!isAuthorized) {
-    return NextResponse.json({ error: "Anda harus login." }, { status: 401 });
+  const authResult = await requireStaffOrInspectionToken(request, id);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
   }
 
-  let supabase: any = null;
-  try {
-    supabase = await createClient();
-  } catch {}
-
-  const version = await resolveManuscriptVersion(id, supabase);
+  const version = await resolveManuscriptVersion(id);
   if (!version) {
     return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
   }
 
   let fileBuffer: Buffer | null = null;
   try {
-    fileBuffer = await getManuscriptBuffer(version, supabase);
+    fileBuffer = await readManuscriptFile(version.fileStoragePath);
   } catch (err) {
     console.error("Gagal membaca berkas naskah:", err);
   }
@@ -384,98 +274,48 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // A. Jika naskah ada di PostgreSQL lokal (Drizzle)
-  if (version.isLocal) {
-    try {
-      const [run] = await db
-        .insert(referenceCheckRuns)
-        .values({
-          manuscriptVersionId: version.versionId,
-          sourceSetVersion: REFERENCE_SOURCE_SET_VERSION,
-          totalReferences: entries.length,
-        })
-        .returning();
-
-      await db.insert(referenceChecks).values(
-        entries.map((entry) => ({
-          runId: run.id,
-          manuscriptVersionId: version.versionId,
-          entryIndex: entry.entryIndex,
-          rawText: entry.rawText,
-          kind: entry.kind,
-          doi: entry.doi,
-          url: entry.url,
-          title: entry.title,
-          citedYear: entry.year,
-          verdict: "pending",
-        })),
-      );
-
-      return NextResponse.json(
-        {
-          run: {
-            id: run.id,
-            source_set_version: run.sourceSetVersion,
-            total_references: run.totalReferences,
-            started_at: run.startedAt.toISOString(),
-            completed_at: null,
-          },
-          remaining: entries.length,
-        },
-        { status: 201 },
-      );
-    } catch (err: any) {
-      console.error("Gagal menyimpan verifikasi referensi ke PostgreSQL:", err);
-      return NextResponse.json(
-        { error: `Gagal menyimpan daftar referensi: ${err.message}` },
-        { status: 500 },
-      );
-    }
-  }
-
-  // B. Fallback ke Supabase Cloud
   try {
-    const { data: run, error: runError } = await supabase
-      .from("reference_check_runs")
-      .insert({
-        manuscript_version_id: version.versionId,
-        source_set_version: REFERENCE_SOURCE_SET_VERSION,
-        total_references: entries.length,
+    const [run] = await db
+      .insert(referenceCheckRuns)
+      .values({
+        manuscriptVersionId: version.versionId,
+        sourceSetVersion: REFERENCE_SOURCE_SET_VERSION,
+        totalReferences: entries.length,
       })
-      .select("id, source_set_version, total_references, started_at, completed_at")
-      .single();
+      .returning();
 
-    if (runError || !run) {
-      return NextResponse.json(
-        { error: `Gagal memulai verifikasi: ${runError?.message}` },
-        { status: 500 },
-      );
-    }
-
-    const { error: insertError } = await supabase.from("reference_checks").insert(
+    await db.insert(referenceChecks).values(
       entries.map((entry) => ({
-        run_id: run.id,
-        entry_index: entry.entryIndex,
-        raw_text: entry.rawText,
+        runId: run.id,
+        manuscriptVersionId: version.versionId,
+        entryIndex: entry.entryIndex,
+        rawText: entry.rawText,
         kind: entry.kind,
         doi: entry.doi,
         url: entry.url,
         title: entry.title,
-        cited_year: entry.year,
+        citedYear: entry.year,
+        verdict: "pending",
       })),
     );
 
-    if (insertError) {
-      return NextResponse.json(
-        { error: `Gagal menyimpan daftar referensi: ${insertError.message}` },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json({ run, remaining: entries.length }, { status: 201 });
-  } catch (err: any) {
     return NextResponse.json(
-      { error: `Gagal memproses verifikasi: ${err.message}` },
+      {
+        run: {
+          id: run.id,
+          source_set_version: run.sourceSetVersion,
+          total_references: run.totalReferences,
+          started_at: run.startedAt.toISOString(),
+          completed_at: null,
+        },
+        remaining: entries.length,
+      },
+      { status: 201 },
+    );
+  } catch (err: any) {
+    console.error("Gagal menyimpan verifikasi referensi ke PostgreSQL:", err);
+    return NextResponse.json(
+      { error: `Gagal menyimpan daftar referensi: ${err.message}` },
       { status: 500 },
     );
   }
@@ -483,10 +323,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const isAuthorized = await checkAuth(request, id);
-
-  if (!isAuthorized) {
-    return NextResponse.json({ error: "Anda harus login." }, { status: 401 });
+  const authResult = await requireStaffOrInspectionToken(request, id);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
   }
 
   let payload: unknown;
@@ -501,21 +340,36 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "runId tidak disertakan." }, { status: 400 });
   }
 
-  // 1. Coba periksa apakah runId ada di database lokal Drizzle
-  let isLocalRun = false;
   try {
     const [localRun] = await db
-      .select()
+      .select({ id: referenceCheckRuns.id })
       .from(referenceCheckRuns)
-      .where(eq(referenceCheckRuns.id, runId))
+      .innerJoin(
+        manuscriptVersions,
+        eq(manuscriptVersions.id, referenceCheckRuns.manuscriptVersionId),
+      )
+      .where(
+        and(
+          eq(referenceCheckRuns.id, runId),
+          eq(manuscriptVersions.manuscriptId, id),
+        ),
+      )
       .limit(1);
-    if (localRun) {
-      isLocalRun = true;
-    }
-  } catch {}
 
-  if (isLocalRun) {
-    try {
+    if (!localRun) {
+      return NextResponse.json(
+        { error: "Proses verifikasi tidak ditemukan untuk naskah ini." },
+        { status: 404 },
+      );
+    }
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: `Gagal memeriksa proses verifikasi: ${err.message}` },
+      { status: 500 },
+    );
+  }
+
+  try {
       const pendingRows = await db
         .select()
         .from(referenceChecks)
@@ -627,93 +481,4 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         { status: 500 },
       );
     }
-  }
-
-  // 2. Fallback ke Supabase jika bukan run lokal
-  try {
-    const supabase = await createClient();
-    const version = await resolveManuscriptVersion(id, supabase);
-    if (!version) {
-      return NextResponse.json({ error: "Naskah tidak ditemukan." }, { status: 404 });
-    }
-
-    const { data: run } = await supabase
-      .from("reference_check_runs")
-      .select("id, manuscript_version_id")
-      .eq("id", runId)
-      .eq("manuscript_version_id", version.versionId)
-      .maybeSingle();
-
-    if (!run) {
-      return NextResponse.json(
-        { error: "Proses verifikasi tidak ditemukan untuk naskah ini." },
-        { status: 404 },
-      );
-    }
-
-    const { data: pending } = await supabase
-      .from("reference_checks")
-      .select(ROW_COLUMNS)
-      .eq("run_id", run.id)
-      .eq("verdict", "pending")
-      .order("entry_index", { ascending: true })
-      .limit(BATCH_SIZE);
-
-    const batch = (pending ?? []) as ReferenceCheckRow[];
-
-    const results = await mapWithConcurrency(batch, CONCURRENCY, async (row) => {
-      const result = await verifyReference(entryFromStoredRow(row));
-
-      return {
-        id: row.id,
-        update: {
-          verdict: result.verdict,
-          confidence: result.confidence,
-          note: result.note,
-          match_source: result.match?.source ?? null,
-          match_title: result.match?.title ?? null,
-          match_year: result.match?.year ?? null,
-          match_url: result.match?.url ?? null,
-          match_similarity: result.match?.titleSimilarity ?? null,
-          checked_at: new Date().toISOString(),
-        },
-      };
-    });
-
-    for (const { id: rowId, update } of results) {
-      await supabase.from("reference_checks").update(update).eq("id", rowId);
-    }
-
-    const { count: remaining } = await supabase
-      .from("reference_checks")
-      .select("id", { count: "exact", head: true })
-      .eq("run_id", run.id)
-      .eq("verdict", "pending");
-
-    const stillPending = remaining ?? 0;
-
-    if (stillPending === 0) {
-      await supabase
-        .from("reference_check_runs")
-        .update({ completed_at: new Date().toISOString() })
-        .eq("id", run.id);
-    }
-
-    const { data: checks } = await supabase
-      .from("reference_checks")
-      .select(ROW_COLUMNS)
-      .eq("run_id", run.id)
-      .order("entry_index", { ascending: true });
-
-    return NextResponse.json({
-      remaining: stillPending,
-      checked: batch.length,
-      checks: checks ?? [],
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: `Gagal memperbarui verifikasi: ${err.message}` },
-      { status: 500 },
-    );
-  }
 }

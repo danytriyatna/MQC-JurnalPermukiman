@@ -1,26 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/auth/guard";
 import { db, manuscripts as manuscriptsTable } from "@/db";
 import { inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-mqc-api-key",
-};
+function getCorsHeaders(): Record<string, string> {
+  const allowedOrigin =
+    process.env.CORS_ALLOWED_ORIGIN?.trim() || "http://localhost:8000";
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-mqc-api-key",
+  };
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders,
+    headers: getCorsHeaders(),
   });
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(request: NextRequest) {
+  const corsHeaders = getCorsHeaders();
+  const authResult = await requireStaffSession(request);
+  if (authResult.errorResponse) {
+    return NextResponse.json(
+      { error: "Unauthorized: Login staf diperlukan." },
+      { status: 401, headers: corsHeaders },
+    );
+  }
+
   let body: { manuscriptIds?: unknown };
   try {
     body = await request.json();
@@ -70,17 +83,6 @@ export async function POST(request: NextRequest) {
     localDeletedCount = updatedRows.length;
   } catch (err) {
     console.error("Gagal melakukan soft-delete massal di database lokal:", err);
-  }
-
-  // 2. Sinkronisasi soft-delete massal ke Supabase jika tersedia
-  try {
-    const supabase = await createClient();
-    await supabase
-      .from("manuscripts")
-      .update({ deleted_at: now.toISOString() })
-      .in("id", validIds);
-  } catch {
-    // Abaikan jika Supabase offline
   }
 
   return NextResponse.json(

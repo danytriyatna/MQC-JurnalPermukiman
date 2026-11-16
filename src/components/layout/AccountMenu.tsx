@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "next-auth/react";
 import { initialsOf } from "@/lib/status";
 
 interface AccountMenuProps {
@@ -59,8 +59,7 @@ export default function AccountMenu({ userName, userEmail }: AccountMenuProps) {
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOut({ redirect: false });
     router.push("/login");
     router.refresh();
   };

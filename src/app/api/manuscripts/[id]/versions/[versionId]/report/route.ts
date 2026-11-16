@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateReportDocx, ReportFinding } from "@/lib/docx/generateReport";
+import { requireStaffOrInspectionToken } from "@/lib/auth/guard";
 import { resolveReviewedByForManuscript, buildOjsReportFileName } from "@/lib/ojs/ojsClient";
 import { db, manuscripts as manuscriptsTable, manuscriptVersions, screeningRuns, findings as findingsTable } from "@/db";
 import { eq, and, desc } from "drizzle-orm";
@@ -8,8 +9,13 @@ interface RouteParams {
   params: Promise<{ id: string; versionId: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id: manuscriptId, versionId } = await params;
+
+  const authResult = await requireStaffOrInspectionToken(request, manuscriptId);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
+  }
 
   try {
     // 1. Ambil Data Induk Naskah

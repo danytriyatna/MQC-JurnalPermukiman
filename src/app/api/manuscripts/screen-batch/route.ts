@@ -9,6 +9,7 @@ import {
   getAssignedEditorFromOjs,
 } from "@/lib/ojs/ojsClient";
 import { buildJobIdempotencyKey } from "@/lib/queue/screeningQueue";
+import { requireStaffSession } from "@/lib/auth/guard";
 import { db, manuscripts, manuscriptVersions, screeningRuns, findings, screeningJobs } from "@/db";
 import { eq, desc } from "drizzle-orm";
 import { ManuscriptStatus } from "@/lib/types";
@@ -33,6 +34,14 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders();
+  const authResult = await requireStaffSession(request);
+  if (authResult.errorResponse) {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized: Login staf diperlukan." },
+      { status: 401, headers: corsHeaders },
+    );
+  }
+
   let body: { manuscriptIds?: unknown };
   try {
     body = await request.json();

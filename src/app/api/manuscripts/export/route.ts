@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffSession } from "@/lib/auth/guard";
 import { toCsv } from "@/lib/csv";
 import { statusMeta } from "@/lib/status";
 import { ManuscriptStatus } from "@/lib/types";
@@ -25,6 +25,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireStaffSession(request);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
+  }
+
   const month = request.nextUrl.searchParams.get("month") ?? "";
   const range = month ? monthRange(month) : null;
 
@@ -47,9 +52,8 @@ export async function GET(request: NextRequest) {
   ];
 
   let rows: string[][] = [];
-  let foundInLocal = false;
 
-  // 1. Ambil data dari basis data lokal PostgreSQL (mqc_db) via Drizzle ORM
+  // Ambil data dari basis data lokal PostgreSQL (mqc_db) via Drizzle ORM
   try {
     const conditions = [isNull(manuscriptsTable.deletedAt)];
     if (range) {
@@ -78,7 +82,6 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(manuscriptsTable.createdAt));
 
     if (localRows.length > 0) {
-      foundInLocal = true;
       rows = localRows.map((m) => {
         const uploader = m.authorName || m.uploaderName || "Penulis OJS";
         const statusLabel =
@@ -101,54 +104,6 @@ export async function GET(request: NextRequest) {
     }
   } catch (err) {
     console.error("Gagal mengambil data ekspor dari PostgreSQL lokal:", err);
-  }
-
-  // 2. Fallback ke Supabase jika basis data lokal kosong dan kredensial Supabase tersedia
-  if (!foundInLocal) {
-    try {
-      const supabase = await createClient();
-      let query = supabase
-        .from("manuscripts")
-        .select(
-          "title, original_file_name, status, version_number, total_rules_checked, total_rules_passed, error_findings, warning_findings, created_at, updated_at, author_name, uploaded_by_profile:profiles!uploaded_by(full_name)",
-        )
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-
-      if (range) {
-        query = query
-          .gte("created_at", range.start.toISOString())
-          .lt("created_at", range.end.toISOString());
-      }
-
-      const { data } = await query;
-      if (data && data.length > 0) {
-        rows = data.map((m: any) => {
-          const profile = Array.isArray(m.uploaded_by_profile)
-            ? m.uploaded_by_profile[0]
-            : m.uploaded_by_profile;
-          const uploader = m.author_name || profile?.full_name || "Penulis OJS";
-          const statusLabel =
-            STATUS_LABELS[m.status] ?? (statusMeta[m.status as ManuscriptStatus]?.label ?? m.status);
-
-          return [
-            m.title,
-            m.original_file_name,
-            statusLabel,
-            `v${m.version_number}`,
-            String(m.total_rules_passed),
-            String(m.total_rules_checked),
-            String(m.error_findings),
-            String(m.warning_findings),
-            uploader,
-            new Date(m.created_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
-            new Date(m.updated_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
-          ];
-        });
-      }
-    } catch {
-      // Abaikan jika Supabase offline/tidak dikonfigurasi
-    }
   }
 
   const csv = toCsv(headers, rows);

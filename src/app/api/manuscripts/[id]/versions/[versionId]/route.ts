@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireStaffOrInspectionToken } from "@/lib/auth/guard";
 import { db, manuscripts, manuscriptVersions, screeningRuns, findings, referenceCheckRuns, referenceChecks, users } from "@/db";
 import { eq, and, desc, asc } from "drizzle-orm";
 
@@ -6,8 +7,13 @@ interface RouteParams {
   params: Promise<{ id: string; versionId: string }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id: manuscriptId, versionId } = await params;
+
+  const authResult = await requireStaffOrInspectionToken(request, manuscriptId);
+  if (authResult.errorResponse) {
+    return authResult.errorResponse;
+  }
 
   try {
     // 1. Ambil Informasi Versi Spesifik

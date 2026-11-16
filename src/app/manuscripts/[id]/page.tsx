@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import AppHeader from "@/components/layout/AppHeader";
@@ -15,7 +15,8 @@ import ReferenceVerificationPanel, {
   ReferenceCheckRowData,
   ReferenceRunData,
 } from "@/components/references/ReferenceVerificationPanel";
-import { createClient } from "@/lib/supabase/server";
+import { getStaffSession } from "@/lib/auth/guard";
+import { verifyInspectionToken } from "@/lib/auth/token";
 import { formatDateID } from "@/lib/status";
 import { ManuscriptStatus } from "@/lib/types";
 import {
@@ -38,6 +39,17 @@ interface PageProps {
 export default async function ManuscriptDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { token } = await searchParams;
+
+  const staffSession = await getStaffSession();
+  const isStaff = Boolean(staffSession);
+  const validInspectionToken =
+    token && token.trim().length > 0
+      ? await verifyInspectionToken(token.trim(), id)
+      : null;
+
+  if (!isStaff && !validInspectionToken) {
+    redirect("/login");
+  }
 
   // 1. Coba ambil data dari basis data lokal PostgreSQL (mqc_db) via Drizzle ORM
   let manuscript: any = null;
@@ -193,110 +205,30 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
     console.error("Gagal membaca detail naskah dari database lokal Drizzle:", err);
   }
 
-  // 2. Fallback ke Supabase jika naskah tidak ada di database lokal
-  if (!manuscript) {
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("manuscripts")
-        .select(
-          "id, title, original_file_name, status, version_number, total_rules_checked, total_rules_passed, error_findings, warning_findings, created_at, updated_at, current_version_id, deleted_at, uploaded_by_profile:profiles!uploaded_by(full_name)",
-        )
-        .eq("id", id)
-        .single();
-
-      if (!error && data) {
-        manuscript = data;
-        const uploadedByProfile = Array.isArray(manuscript.uploaded_by_profile)
-          ? manuscript.uploaded_by_profile[0]
-          : manuscript.uploaded_by_profile;
-        uploaderDisplayName = uploadedByProfile?.full_name ?? "—";
-
-        if (manuscript.current_version_id) {
-          const { data: ver } = await supabase
-            .from("manuscript_versions")
-            .select("id, parse_status, parse_error_message")
-            .eq("id", manuscript.current_version_id)
-            .single();
-
-          parseErrorMessage = ver?.parse_error_message ?? null;
-
-          if (ver) {
-            const { data: run } = await supabase
-              .from("screening_runs")
-              .select("id")
-              .eq("manuscript_version_id", ver.id)
-              .order("run_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (run) {
-              const { data: findingRows } = await supabase
-                .from("findings")
-                .select("id, section, severity, check_type, location, current_value, expected_value, suggested_fix")
-                .eq("screening_run_id", run.id);
-
-              findings = (findingRows ?? []).map((f) => ({
-                id: f.id,
-                section: f.section,
-                severity: f.severity,
-                checkType: f.check_type,
-                location: f.location,
-                currentValue: f.current_value,
-                expectedValue: f.expected_value,
-                suggestedFix: f.suggested_fix,
-              }));
-            }
-          }
-        }
-
-        const { data: versionRows } = await supabase
-          .from("manuscript_versions")
-          .select(
-            "id, version_number, original_file_name, uploaded_at, parse_status, uploaded_by_profile:profiles!uploaded_by(full_name)",
-          )
-          .eq("manuscript_id", id)
-          .order("version_number", { ascending: false });
-
-        versions = (versionRows ?? []).map((v) => {
-          const profile = Array.isArray(v.uploaded_by_profile) ? v.uploaded_by_profile[0] : v.uploaded_by_profile;
-          return {
-            id: v.id,
-            versionNumber: v.version_number,
-            originalFileName: v.original_file_name,
-            uploadedAt: v.uploaded_at,
-            uploadedBy: profile?.full_name ?? "—",
-            parseStatus: v.parse_status,
-          };
-        });
-      }
-    } catch {
-      // Supabase offline
-    }
-  }
-
   if (!manuscript || manuscript.deleted_at) {
     notFound();
   }
 
   const status = manuscript.status as ManuscriptStatus;
-  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
+  const tokenQuery = !isStaff && token ? `?token=${encodeURIComponent(token)}` : "";
 
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className="-ml-3 h-8 gap-1.5 text-slate-500 hover:text-slate-900"
-        >
-          <Link href="/dashboard">
-            <ArrowLeft className="h-4 w-4" />
-            Kembali ke Riwayat Naskah
-          </Link>
-        </Button>
+        {isStaff ? (
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="-ml-3 h-8 gap-1.5 text-slate-500 hover:text-slate-900"
+          >
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+              Kembali ke Riwayat Naskah
+            </Link>
+          </Button>
+        ) : null}
 
         <div className="mt-3 mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -328,7 +260,7 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
                 )}
               </>
             )}
-            <DeleteManuscriptButton manuscriptId={manuscript.id} />
+            {isStaff ? <DeleteManuscriptButton manuscriptId={manuscript.id} /> : null}
           </div>
         </div>
 
@@ -345,18 +277,20 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
                   ) : null}{" "}
                   telah berhasil diterima dan saat ini berada di dalam antrean tugas pemeriksaan Tim Redaksi Jurnal Permukiman. Hasil penapisan format dan verifikasi referensi akan ditampilkan di sini setelah redaksi menjalankan pemeriksaan.
                 </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <ScreenNowPendingButton
-                    manuscriptId={manuscript.id}
-                    versionNumber={manuscript.version_number}
-                    originalFileName={currentVersionFileName || manuscript.original_file_name}
-                  />
-                  <Button asChild variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50">
-                    <Link href="/dashboard">
-                      Buka Antrean di Dashboard &rarr;
-                    </Link>
-                  </Button>
-                </div>
+                {isStaff ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <ScreenNowPendingButton
+                      manuscriptId={manuscript.id}
+                      versionNumber={manuscript.version_number}
+                      originalFileName={currentVersionFileName || manuscript.original_file_name}
+                    />
+                    <Button asChild variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                      <Link href="/dashboard">
+                        Buka Antrean di Dashboard &rarr;
+                      </Link>
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -393,17 +327,19 @@ export default async function ManuscriptDetailPage({ params, searchParams }: Pag
                 manuscriptId={manuscript.id}
                 initialRun={referenceRun}
                 initialChecks={referenceChecks}
+                inspectionToken={!isStaff ? token : undefined}
               />
             </div>
           </>
         )}
 
         <div className="mt-5 flex flex-col gap-4">
-          <RevisionUploadSection manuscriptId={manuscript.id} />
+          {isStaff ? <RevisionUploadSection manuscriptId={manuscript.id} /> : null}
           <VersionHistoryList
             versions={versions}
             manuscriptId={manuscript.id}
             currentVersionId={manuscript.current_version_id}
+            inspectionToken={!isStaff ? token : undefined}
           />
         </div>
       </main>
