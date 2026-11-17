@@ -1,112 +1,86 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import ManuscriptDashboard from "@/components/dashboard/ManuscriptDashboard";
-import { createClient } from "@/lib/supabase/server";
-import { mapManuscriptRow, type ManuscriptRow } from "@/lib/supabase/mappers";
-import fs from "fs/promises";
-import path from "path";
+import { getStaffSession } from "@/lib/auth/guard";
+import { db, manuscripts as manuscriptsTable, manuscriptVersions, users } from "@/db";
+import { desc, isNull, eq } from "drizzle-orm";
+import { Manuscript, ManuscriptStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-async function getOjsSyncedSubmissions() {
-  try {
-    const filePath = path.join(process.cwd(), "data", "ojs_synced_submissions.json");
-    const raw = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("manuscripts")
-    .select(
-      "id, title, original_file_name, status, version_number, total_rules_checked, total_rules_passed, error_findings, warning_findings, created_at, updated_at, uploaded_by_profile:profiles!uploaded_by(full_name)",
-    )
-    .is("deleted_at", null)
-    .order("updated_at", { ascending: false });
-
-  let manuscripts = (data as ManuscriptRow[] | null)?.map(mapManuscriptRow) ?? [];
-
-  if (process.env.NEXT_PUBLIC_DEV_MODE === "true" && (!data || data.length === 0 || error)) {
-    manuscripts = [
-      {
-        id: "demo-mqc-1",
-        title: "Kajian Kuat Lentur Balok Beton Bertulang dengan Agregat Daur Ulang",
-        originalFileName: "Kajian_Kuat_Lentur_Balok_2026.docx",
-        uploadedBy: "Dany Triyatna",
-        status: "passed",
-        versionNumber: 1,
-        totalRulesChecked: 25,
-        totalRulesPassed: 24,
-        errorFindings: 0,
-        warningFindings: 1,
-        createdAt: new Date(Date.now() - 7200000).toISOString(),
-        updatedAt: new Date(Date.now() - 7200000).toISOString(),
-      },
-      {
-        id: "demo-mqc-2",
-        title: "Analisis Pola Sebaran dan Kepadatan Permukiman Kumuh Pesisir Semarang",
-        originalFileName: "Pola_Sebaran_Permukiman_Pesisir.docx",
-        uploadedBy: "Dany Triyatna",
-        status: "needs_revision",
-        versionNumber: 2,
-        totalRulesChecked: 25,
-        totalRulesPassed: 19,
-        errorFindings: 2,
-        warningFindings: 4,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        updatedAt: new Date(Date.now() - 43200000).toISOString(),
-      },
-    ];
+  const session = await getStaffSession();
+  if (!session) {
+    redirect("/login");
   }
 
-  // Gabungkan naskah yang disinkronkan secara otomatis dari OJS ke daftar paling atas
-  const ojsSubmissions = await getOjsSyncedSubmissions();
-  if (ojsSubmissions.length > 0) {
-    const ojsIds = new Set(ojsSubmissions.map((s: any) => s.id));
-    const remaining = manuscripts.filter((m) => !ojsIds.has(m.id));
-    manuscripts = [...ojsSubmissions, ...remaining];
+  let manuscriptsList: Manuscript[] = [];
+  let dbError = false;
+
+  // 1. Ambil naskah dari PostgreSQL lokal (mqc_db) via Drizzle ORM
+  try {
+    const localRows = await db
+      .select({
+        id: manuscriptsTable.id,
+        title: manuscriptsTable.title,
+        originalFileName: manuscriptsTable.originalFileName,
+        activeVersionFileName: manuscriptVersions.originalFileName,
+        status: manuscriptsTable.status,
+        versionNumber: manuscriptsTable.versionNumber,
+        totalRulesChecked: manuscriptsTable.totalRulesChecked,
+        totalRulesPassed: manuscriptsTable.totalRulesPassed,
+        errorFindings: manuscriptsTable.errorFindings,
+        warningFindings: manuscriptsTable.warningFindings,
+        createdAt: manuscriptsTable.createdAt,
+        updatedAt: manuscriptsTable.updatedAt,
+        uploaderName: users.fullName,
+        authorName: manuscriptsTable.authorName,
+      })
+      .from(manuscriptsTable)
+      .leftJoin(users, eq(users.id, manuscriptsTable.uploadedBy))
+      .leftJoin(
+        manuscriptVersions,
+        eq(manuscriptVersions.id, manuscriptsTable.currentVersionId),
+      )
+      .where(isNull(manuscriptsTable.deletedAt))
+      .orderBy(desc(manuscriptsTable.updatedAt));
+
+    manuscriptsList = localRows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      originalFileName: r.activeVersionFileName || r.originalFileName,
+      uploadedBy: r.authorName || r.uploaderName || "Penulis OJS",
+      status: r.status as ManuscriptStatus,
+      versionNumber: r.versionNumber,
+      totalRulesChecked: r.totalRulesChecked,
+      totalRulesPassed: r.totalRulesPassed,
+      errorFindings: r.errorFindings,
+      warningFindings: r.warningFindings,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  } catch (err) {
+    console.error("Gagal mengambil naskah dari database lokal:", err);
+    dbError = true;
   }
 
   return (
-    <div className="flex min-h-screen flex-col puskim-canvas">
+    <div className="min-h-screen bg-slate-50">
       <AppHeader />
-      <main className="mx-auto w-full max-w-[1760px] flex-1 px-4 py-5 sm:px-6 lg:px-8">
-        <div className="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-          <div className="flex items-start gap-3">
-            <span
-              className="mt-1 h-7 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-[#D14715] to-[#8C2806]"
-              aria-hidden="true"
-            />
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-stone-900">
-                Antrean &amp; Riwayat Naskah
-              </h1>
-              <p className="mt-0.5 text-sm text-stone-600">
-                Daftar naskah masuk terpadu dari portal{" "}
-                <strong className="font-semibold text-stone-800">OJS Jurnal Permukiman</strong>{" "}
-                dan riwayat pemeriksaan format mandiri.
-              </p>
-            </div>
-          </div>
-          {ojsSubmissions.length > 0 && (
-            <span className="inline-flex items-center gap-2 self-start sm:self-auto rounded-full border border-emerald-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-emerald-800 shadow-xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-100" aria-hidden="true" />
-              Terhubung ke OJS ({ojsSubmissions.length} Naskah Terintegrasi)
-            </span>
-          )}
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 min-h-[calc(100vh-4rem)] pb-24">
+        <div className="mb-5">
+          <h1 className="text-lg font-semibold text-slate-900">Riwayat Naskah</h1>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Pantau status pemeriksaan kesesuaian naskah dengan template Jurnal Permukiman.
+          </p>
         </div>
-        {error && process.env.NEXT_PUBLIC_DEV_MODE !== "true" && ojsSubmissions.length === 0 ? (
+        {dbError && manuscriptsList.length === 0 ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            Gagal memuat data naskah. Coba muat ulang halaman.
+            Gagal memuat data naskah. Pastikan basis data lokal aktif.
           </div>
         ) : (
-          <ManuscriptDashboard manuscripts={manuscripts} />
+          <ManuscriptDashboard manuscripts={manuscriptsList} />
         )}
       </main>
       <footer className="mt-auto border-t border-[#DFD9D2] bg-white/80 backdrop-blur-xs">

@@ -4,6 +4,11 @@ export const statusMeta: Record<
   ManuscriptStatus,
   { label: string; dotClass: string; badgeClass: string }
 > = {
+  pending: {
+    label: "Menunggu Pemeriksaan",
+    dotClass: "bg-blue-500",
+    badgeClass: "bg-blue-50 text-blue-700 ring-blue-600/20",
+  },
   passed: {
     label: "Lolos",
     dotClass: "bg-emerald-500",

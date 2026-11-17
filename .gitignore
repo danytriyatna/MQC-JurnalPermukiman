@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local storage
+/storage/*
+!/storage/.gitkeep
+!/storage/manuscripts/.gitkeep

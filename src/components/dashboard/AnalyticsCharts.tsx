@@ -1,114 +1,238 @@
+"use client";
+
+import * as React from "react";
+import { Area, AreaChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { Manuscript } from "@/lib/types";
 import { statusDistribution, manuscriptsPerMonth, complianceByUploader } from "@/lib/dashboard/analytics";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { cn } from "@/lib/utils";
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+const areaChartConfig = {
+  count: {
+    label: "Naskah",
+    color: "#6366f1",
+  },
+} satisfies ChartConfig;
+
+function MonthlyAreaChart({ manuscripts }: { manuscripts: Manuscript[] }) {
+  const buckets = manuscriptsPerMonth(manuscripts, 6);
+  const rawId = React.useId();
+  const fillId = `fill-${rawId.replace(/:/g, "")}`;
+
   return (
-    <div className="fresh-card flex h-full flex-col rounded-2xl p-4">
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-[#C13D0D]" aria-hidden="true" />
-        <h3 className="text-sm font-bold text-stone-900">{title}</h3>
-      </div>
-      <div className="mt-4 flex flex-1 flex-col justify-center">{children}</div>
-    </div>
+    <ChartContainer config={areaChartConfig} className="aspect-auto h-[180px] w-full">
+      <AreaChart
+        data={buckets}
+        margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
+      >
+        <defs>
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--color-count, #6366f1)" stopOpacity={0.8} />
+            <stop offset="95%" stopColor="var(--color-count, #6366f1)" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted" />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          className="text-xs text-muted-foreground"
+        />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          allowDecimals={false}
+          className="text-xs text-muted-foreground"
+        />
+        <ChartTooltip
+          cursor={{ stroke: "var(--color-count, #6366f1)", strokeWidth: 1, strokeDasharray: "4 4" }}
+          content={<ChartTooltipContent indicator="line" />}
+        />
+        <Area
+          dataKey="count"
+          type="monotone"
+          fill={`url(#${fillId})`}
+          fillOpacity={1}
+          stroke="var(--color-count, #6366f1)"
+          strokeWidth={2}
+          dot={{ fill: "var(--color-count, #6366f1)", r: 3 }}
+          activeDot={{ r: 5 }}
+        />
+      </AreaChart>
+    </ChartContainer>
   );
 }
 
-function StatusDonut({ manuscripts }: { manuscripts: Manuscript[] }) {
+const donutChartConfig = {
+  count: {
+    label: "Naskah",
+  },
+  pending: {
+    label: "Menunggu",
+    color: "#3b82f6",
+  },
+  passed: {
+    label: "Lolos",
+    color: "#10b981",
+  },
+  needs_revision: {
+    label: "Perlu Revisi",
+    color: "#f59e0b",
+  },
+  processing: {
+    label: "Proses",
+    color: "#0ea5e9",
+  },
+  processing_failed: {
+    label: "Gagal",
+    color: "#f43f5e",
+  },
+} satisfies ChartConfig;
+
+function StatusDonutChart({ manuscripts }: { manuscripts: Manuscript[] }) {
   const slices = statusDistribution(manuscripts);
   const total = slices.reduce((sum, s) => sum + s.count, 0);
 
   if (total === 0) {
-    return <p className="text-sm text-slate-500">Belum ada data.</p>;
+    return (
+      <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+        Belum ada data naskah.
+      </div>
+    );
   }
 
-  const stops = slices.reduce<{ list: string[]; current: number }>(
-    (acc, s) => {
-      const start = acc.current;
-      const percent = (s.count / total) * 100;
-      const next = start + percent;
-      return {
-        list: [...acc.list, `${s.hexColor} ${start}% ${next}%`],
-        current: next,
-      };
-    },
-    { list: [], current: 0 }
-  ).list;
+  const pieData = slices.map((s) => ({
+    status: s.status,
+    label: s.label,
+    count: s.count,
+    fill: s.hexColor,
+  }));
 
   return (
-    <div className="flex items-center gap-4">
-      <div
-        className="h-24 w-24 2xl:h-28 2xl:w-28 shrink-0 rounded-full"
-        style={{ background: `conic-gradient(${stops.join(", ")})` }}
-        role="img"
-        aria-label={slices.map((s) => `${s.label}: ${s.count}`).join(", ")}
+    <div className="flex flex-col gap-2">
+      <ChartContainer
+        config={donutChartConfig}
+        className="mx-auto aspect-square h-[170px]"
       >
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="flex h-14 w-14 2xl:h-16 2xl:w-16 items-center justify-center rounded-full bg-white">
-            <span className="text-lg font-bold tabular-nums text-stone-900">{total}</span>
-          </div>
-        </div>
-      </div>
-      <ul className="flex flex-1 flex-col gap-1.5 min-w-0">
-        {slices.map((s) => (
-          <li key={s.status} className="flex items-center gap-2 text-sm">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.hexColor }} aria-hidden="true" />
-            <span className="truncate text-stone-700">{s.label}</span>
-            <span className="ml-auto font-semibold tabular-nums text-stone-900">{s.count}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function MonthlyBarChart({ manuscripts }: { manuscripts: Manuscript[] }) {
-  const buckets = manuscriptsPerMonth(manuscripts, 6);
-  const max = Math.max(1, ...buckets.map((b) => b.count));
-
-  return (
-    <div className="flex h-36 items-end justify-between gap-2">
-      {buckets.map((b) => (
-        <div key={b.key} className="flex flex-1 flex-col items-center gap-1.5">
-          <div className="flex h-28 w-full items-end justify-center">
-            <div
-              className="w-full max-w-8 origin-bottom rounded-t-md bg-gradient-to-t from-[#A0320A] to-[#D14715] shadow-xs transition-transform duration-500 ease-[var(--ease-out)]"
-              style={{ height: "100%", transform: `scaleY(${b.count / max})` }}
-              title={`${b.label}: ${b.count} naskah`}
+        <PieChart>
+          <ChartTooltip
+            cursor={false}
+            content={<ChartTooltipContent nameKey="status" hideLabel />}
+          />
+          <Pie
+            data={pieData}
+            dataKey="count"
+            nameKey="status"
+            innerRadius={50}
+            outerRadius={75}
+            strokeWidth={3}
+            stroke="var(--background)"
+          >
+            {pieData.map((entry) => (
+              <Cell key={entry.status} fill={entry.fill} />
+            ))}
+            <Label
+              content={({ viewBox }) => {
+                if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                  const cx = viewBox.cx ?? 0;
+                  const cy = viewBox.cy ?? 0;
+                  return (
+                    <text
+                      x={cx}
+                      y={cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      <tspan
+                        x={cx}
+                        y={cy - 4}
+                        className="fill-foreground text-2xl font-bold tabular-nums"
+                      >
+                        {total}
+                      </tspan>
+                      <tspan
+                        x={cx}
+                        y={cy + 16}
+                        className="fill-muted-foreground text-[10px]"
+                      >
+                        Total
+                      </tspan>
+                    </text>
+                  );
+                }
+              }}
             />
+          </Pie>
+        </PieChart>
+      </ChartContainer>
+
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-1 text-xs">
+        {slices.map((s) => (
+          <div key={s.status} className="flex items-center gap-1.5 text-muted-foreground">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: s.hexColor }}
+              aria-hidden="true"
+            />
+            <span>{s.label}:</span>
+            <span className="font-semibold tabular-nums text-foreground">{s.count}</span>
           </div>
-          <span className="text-[11px] tabular-nums text-stone-500">{b.label}</span>
-          <span className="text-xs font-semibold tabular-nums text-stone-900">{b.count}</span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
-function ComplianceByUploaderChart({ manuscripts }: { manuscripts: Manuscript[] }) {
+function ComplianceByUploaderDisplay({ manuscripts }: { manuscripts: Manuscript[] }) {
   const rows = complianceByUploader(manuscripts);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-stone-500">Belum ada naskah yang selesai diperiksa.</p>;
+    return (
+      <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+        Belum ada naskah yang selesai diperiksa.
+      </div>
+    );
   }
 
   return (
-    <ul className="flex max-h-[168px] flex-col gap-3 overflow-y-auto pr-2">
-      {rows.map((row) => (
-        <li key={row.name}>
-          <div className="mb-1 flex items-center justify-between text-sm">
-            <span className="truncate font-medium text-stone-800">{row.name}</span>
-            <span className="tabular-nums text-stone-500">{row.avgPercent}%</span>
+    <ul className="flex flex-col gap-3.5 pt-1">
+      {rows.slice(0, 5).map((row, index) => (
+        <li key={`${row.name}-${index}`} className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="truncate font-medium text-foreground">{row.name}</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                {row.manuscriptCount} naskah
+              </Badge>
+            </div>
+            <span
+              className={cn(
+                "tabular-nums font-semibold",
+                row.avgPercent >= 80
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : row.avgPercent >= 50
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-rose-600 dark:text-rose-400"
+              )}
+            >
+              {row.avgPercent}%
+            </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[#EFEAE4]">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
             <div
-              className={`h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out)] ${
-                row.avgPercent >= 85
-                  ? "bg-emerald-600"
-                  : row.avgPercent >= 70
-                    ? "bg-[#C13D0D]"
-                    : "bg-amber-500"
-              }`}
-              style={{ transform: `scaleX(${row.avgPercent / 100})` }}
+              className={cn(
+                "h-full rounded-full transition-all duration-500 ease-out",
+                row.avgPercent >= 80
+                  ? "bg-emerald-500"
+                  : row.avgPercent >= 50
+                  ? "bg-amber-500"
+                  : "bg-rose-500"
+              )}
+              style={{ width: `${Math.min(100, Math.max(0, row.avgPercent))}%` }}
             />
           </div>
         </li>
@@ -119,16 +243,36 @@ function ComplianceByUploaderChart({ manuscripts }: { manuscripts: Manuscript[] 
 
 export default function AnalyticsCharts({ manuscripts }: { manuscripts: Manuscript[] }) {
   return (
-    <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-3">
-      <ChartCard title="Distribusi Status Naskah">
-        <StatusDonut manuscripts={manuscripts} />
-      </ChartCard>
-      <ChartCard title="Naskah Masuk per Bulan">
-        <MonthlyBarChart manuscripts={manuscripts} />
-      </ChartCard>
-      <ChartCard title="Rata-rata Kepatuhan per Staf">
-        <ComplianceByUploaderChart manuscripts={manuscripts} />
-      </ChartCard>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Distribusi Status Naskah</CardTitle>
+          <CardDescription className="text-xs">Proporsi status kelayakan seluruh naskah</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StatusDonutChart manuscripts={manuscripts} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Naskah Masuk per Bulan</CardTitle>
+          <CardDescription className="text-xs">Tren volume pengiriman 6 bulan terakhir</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MonthlyAreaChart manuscripts={manuscripts} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Rata-rata Kepatuhan per Staf</CardTitle>
+          <CardDescription className="text-xs">Tingkat kepatuhan panduan penulisan per pengunggah</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ComplianceByUploaderDisplay manuscripts={manuscripts} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

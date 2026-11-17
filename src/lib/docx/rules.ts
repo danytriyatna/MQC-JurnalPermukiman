@@ -53,7 +53,11 @@ const STRUCTURE_HEADINGS = [
     label: "Acknowledgements",
     variants: ["ACKNOWLEDGEMENTS", "ACKNOWLEDGEMENT", "ACKNOWLEDGMENTS", "ACKNOWLEDGMENT"],
   },
-  { key: "REFERENCES", label: "References", variants: ["REFERENCES", "REFERENCE"] },
+  {
+    key: "REFERENCES",
+    label: "References",
+    variants: ["REFERENCES", "REFERENCE", "DAFTAR PUSTAKA", "PUSTAKA"],
+  },
 ];
 
 function wordCount(text: string): number {
@@ -514,12 +518,29 @@ export function getReferenceEntries(doc: ParsedDocument): ParsedParagraph[] | nu
   const refHeadingIndex = doc.paragraphs.find((p) => isHeadingCandidate(p.text) === "REFERENCES")?.index;
   if (refHeadingIndex === undefined) return null;
 
-  const styledEntries = doc.paragraphs.filter(
-    (p) => p.index > refHeadingIndex && p.styleId === "A6Pustaka",
+  // Find where the references section ends (if there is an Appendix or another section heading)
+  const nextHeading = doc.paragraphs.find(
+    (p) =>
+      p.index > refHeadingIndex &&
+      (isHeadingCandidate(p.text) !== null ||
+        /^(lampiran|appendix)\b/i.test(p.text.trim())),
   );
-  return styledEntries.length > 0
-    ? styledEntries
-    : doc.paragraphs.filter((p) => p.index > refHeadingIndex && p.text.trim().length > 15);
+  const endIndex = nextHeading ? nextHeading.index : Infinity;
+
+  const inRange = (p: ParsedParagraph) =>
+    p.index > refHeadingIndex && p.index < endIndex && p.text.trim().length > 15;
+
+  const styledEntries = doc.paragraphs.filter((p) => inRange(p) && p.styleId === "A6Pustaka");
+  const fallbackEntries = doc.paragraphs.filter(inRange);
+
+  // If styled entries exist and cover the majority of references, prefer them.
+  // Otherwise (e.g. author did not format all entries with A6Pustaka, or template left an empty styled paragraph),
+  // use all non-empty paragraphs in range.
+  if (styledEntries.length >= 5 && styledEntries.length >= fallbackEntries.length * 0.7) {
+    return styledEntries;
+  }
+
+  return fallbackEntries.length > 0 ? fallbackEntries : (styledEntries.length > 0 ? styledEntries : []);
 }
 
 export function checkReferences(doc: ParsedDocument): FindingDraft[] {

@@ -1,19 +1,17 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getStaffSession } from "@/lib/auth/guard";
+import { getJpInsightPublicUrl, getOjsPublicUrl } from "@/lib/public-urls";
 import LoginForm from "@/components/auth/LoginForm";
 
 export default async function LoginPage() {
-  if (process.env.NEXT_PUBLIC_DEV_MODE !== "true") {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      redirect("/dashboard");
-    }
+  const session = await getStaffSession();
+  if (session) {
+    redirect("/dashboard");
   }
+
+  const ojsPublicUrl = getOjsPublicUrl();
+  const jpInsightPublicUrl = getJpInsightPublicUrl();
 
   return (
     <div className="flex min-h-screen flex-col puskim-canvas">
@@ -68,7 +66,7 @@ export default async function LoginPage() {
               <p className="font-semibold text-white">Direktorat Bina Teknik Bangunan Gedung dan Penyehatan Lingkungan</p>
               <div className="mt-2 flex flex-wrap gap-3">
                 <a
-                  href="http://localhost/jurnalpermukiman/index.php/JP"
+                  href={ojsPublicUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-semibold text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"
@@ -76,7 +74,7 @@ export default async function LoginPage() {
                   Portal OJS ↗
                 </a>
                 <a
-                  href="http://localhost:3001"
+                  href={jpInsightPublicUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-semibold text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"

@@ -1,25 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getStaffSession } from "@/lib/auth/guard";
 import AccountMenu from "./AccountMenu";
 
 export default async function AppHeader() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let userName = process.env.NEXT_PUBLIC_DEV_MODE === "true" ? "Dany Triyatna" : "Pengguna";
-  const userEmail = user?.email ?? (process.env.NEXT_PUBLIC_DEV_MODE === "true" ? "dany@puskim.pu.go.id" : "");
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .single();
-    userName = profile?.full_name ?? userEmail;
-  }
+  const session = await getStaffSession();
+  const userName = session?.name ?? "Penulis OJS";
+  const userEmail = session?.email ?? "";
 
   return (
     <header className="sticky top-0 z-20 border-b border-[#8C2806]/60 bg-gradient-to-r from-[#B93A0C] via-[#C13D0D] to-[#962D08] shadow-sm">
@@ -42,24 +29,35 @@ export default async function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <Link
-            href="/manuscripts/upload"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs sm:text-sm font-bold text-[#A0320A] shadow-xs transition-all duration-150 hover:bg-[#FDF4F0] hover:shadow active:scale-[0.97]"
-          >
-            <svg
-              className="h-4 w-4 shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2.2}
-              stroke="currentColor"
-              aria-hidden="true"
+          {session ? (
+            <Link
+              href="/manuscripts/upload"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs sm:text-sm font-bold text-[#A0320A] shadow-xs transition-all duration-150 hover:bg-[#FDF4F0] hover:shadow active:scale-[0.97]"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            <span className="hidden sm:inline">Unggah Naskah</span>
-          </Link>
+              <svg
+                className="h-4 w-4 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2.2}
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              <span className="hidden sm:inline">Unggah Naskah</span>
+            </Link>
+          ) : null}
 
-          <AccountMenu userName={userName} userEmail={userEmail} />
+          {session ? (
+            <AccountMenu userName={userName} userEmail={userEmail} />
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex items-center rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              Masuk Staf
+            </Link>
+          )}
         </div>
       </div>
     </header>
