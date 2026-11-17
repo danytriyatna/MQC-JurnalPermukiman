@@ -266,7 +266,7 @@ function ManuscriptDetailShell({
             <span className="h-2 w-2 rounded-full bg-[#C13D0D]" aria-hidden="true" />
             <span>
               <strong className="font-semibold text-stone-700">MQC Assistant</strong> · Jurnal
-              Permukiman — Direktorat Bina Teknik Permukiman dan Perumahan, Kementerian PU
+              Permukiman — Direktorat Bina Teknik Bangunan Gedung dan Penyehatan Lingkungan, Kementerian PU
             </span>
           </div>
           <div className="flex items-center gap-4">
