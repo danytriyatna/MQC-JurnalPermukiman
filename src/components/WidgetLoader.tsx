@@ -51,7 +51,7 @@ export function WidgetLoader() {
 
   return (
     <Script
-      src="/jp-chat-widget.js?v=20261115_v2_gold_ring"
+      src="/jp-chat-widget.js?v=20261118_session"
       data-endpoint={widgetEndpoint}
       strategy="afterInteractive"
     />
