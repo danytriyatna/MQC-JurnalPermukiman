@@ -13,6 +13,7 @@
     "test:queue": "tsx --test tests/screening_queue.test.ts",
     "test:load": "tsx --test tests/load_test_50.test.ts",
     "test:ui": "tsx --test tests/ui_modernization.test.ts",
+    "test:widget-proxy": "tsx --test tests/widget_proxy.test.ts",
     "test:soft-delete": "tsx --test tests/soft_delete.test.ts",
     "test:upload": "tsx --test tests/upload_and_revision.test.ts",
     "worker:screening": "tsx src/workers/screeningWorker.ts",

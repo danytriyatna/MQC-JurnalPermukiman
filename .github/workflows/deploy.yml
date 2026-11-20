@@ -26,6 +26,7 @@ jobs:
       - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm run test:ui
+      - run: npm run test:widget-proxy
 
   build-and-deploy:
     name: Build Image & Deploy to VPS
